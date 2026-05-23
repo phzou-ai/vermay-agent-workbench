@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .context_builder import ContextBuilder
 from .memory import MemoryStore
-from .models import OllamaModelClient
+from .model_clients import OllamaModelClient
 from .observation import ObservationHandler
 from .permission import PermissionGate
 from .runtime import MiniAgentRuntime

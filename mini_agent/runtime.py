@@ -5,7 +5,7 @@ import json
 
 from .context_builder import ContextBuilder
 from .memory import MemoryStore
-from .models import ModelClient
+from .model_clients import ModelClient
 from .observation import ObservationHandler
 from .permission import PermissionGate
 from .tool_executor import ToolExecutor

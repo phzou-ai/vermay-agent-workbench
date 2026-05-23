@@ -166,6 +166,17 @@ SSH 工具使用严格 allowlist，不暴露任意 SSH 命令执行。当前支�
 
 ```text
 mini_agent/
+  infra/
+    ssh.py
+  model_clients/
+    ollama.py
+    protocol.py
+  tools/
+    devops/
+      registry.py
+      mock.py
+      remote_kubernetes.py
+      dangerous.py
   runtime.py
   context_builder.py
   tool_registry.py
@@ -174,13 +185,11 @@ mini_agent/
   permission.py
   memory.py
   trace.py
-  models.py
   main.py
-  tools/
-    devops.py
 data/
   cluster.json
   nginx.log
+  ssh_config.json
 traces/
 ```
 

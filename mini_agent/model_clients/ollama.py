@@ -3,13 +3,8 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from typing import Protocol
 
-from .types import Message, ModelResponse, ToolCall
-
-
-class ModelClient(Protocol):
-    def invoke(self, messages: list[Message], tools: list[dict]) -> ModelResponse: ...
+from mini_agent.types import Message, ModelResponse, ToolCall
 
 
 class OllamaModelClient:
@@ -111,3 +106,4 @@ class OllamaModelClient:
             return ModelResponse(content=json.dumps(decision, ensure_ascii=False))
 
         return ModelResponse(content=f"Invalid model action: {decision}")
+
