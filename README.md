@@ -26,12 +26,40 @@ python3 -m mini_agent.main "check cluster status"
 
 ```bash
 python3 -m mini_agent.main "show pod status"
+python3 -m mini_agent.main "check real cluster pods"
 python3 -m mini_agent.main "grep nginx errors"
 python3 -m mini_agent.main "read nginx log"
 python3 -m mini_agent.main "apply deployment fix"
 ```
 
 默认模型是 Ollama 中的 `deepseek-v4-flash:cloud`。
+
+CLI 默认会在 stderr 输出进度日志，用于区分模型调用、工具执行和最终回答阶段：
+
+```text
+[agent] step 1/5: building context
+[agent] step 1/5: calling model
+[agent] step 1/5: model response Calling tool ssh_kubectl_get.
+[agent] step 1/5: tool_call {"name": "ssh_kubectl_get", "arguments": {"resource": "pods"}}
+[agent] step 1/5: permission allowed=True requires_approval=False reason=safe tool
+[agent] step 1/5: executing tool ssh_kubectl_get
+[agent] step 1/5: tool_result ok=True exit_code=0 command=ssh ...
+[agent] step 1/5: observation {"ok": true, ...}
+```
+
+完整结构化轨迹写入 `traces/*.jsonl`，包含每次 model response、tool call、permission decision、tool result 和 observation。
+
+如需只保留最终 stdout：
+
+```bash
+python3 -m mini_agent.main "check real cluster pods" --no-progress
+```
+
+限制最大模型调用次数：
+
+```bash
+python3 -m mini_agent.main "check real cluster pods" --max-steps 3
+```
 
 ## 使用 Ollama
 
@@ -66,6 +94,61 @@ Ollama adapter 使用本地 HTTP `/api/chat`，要求模型返回严格 JSON：
 ```json
 {"action":"tool_call","name":"kubectl_get","arguments":{"resource":"pods"}}
 ```
+
+## 使用真实 Kubernetes 集群
+
+Demo 同时提供 mock 工具和 SSH-backed 只读工具。
+
+SSH 配置位于：
+
+```text
+data/ssh_config.json
+```
+
+当前配置：
+
+```json
+{
+  "target": "phzou@nuc.server.lan",
+  "port": 22,
+  "workspaceRoot": "/home/phzou/openclaw-sandboxes",
+  "strictHostKeyChecking": true,
+  "updateHostKeys": true,
+  "identityFile": "~/.ssh/openclaw_nuc_ed25519",
+  "knownHostsFile": "~/.ssh/known_hosts"
+}
+```
+
+只读 SSH 工具：
+
+- `ssh_kubectl_get`
+- `ssh_kubectl_describe`
+
+示例：
+
+```bash
+python3 -m mini_agent.main "check real cluster pods"
+python3 -m mini_agent.main "describe real api pod in default namespace"
+```
+
+SSH 工具使用严格 allowlist，不暴露任意 SSH 命令执行。当前支持：
+
+- `kubectl get pods|services|deployments|nodes|namespaces|events`
+- `kubectl describe pod|service|deployment|node`
+
+远端 Kubernetes 命令会按顺序尝试：
+
+1. `kubectl`
+2. `microk8s kubectl`
+3. `/snap/bin/microk8s kubectl`
+
+这用于兼容 MicroK8s 在非交互 SSH shell 中 `/snap/bin` 不在 PATH 的情况。
+
+本机需要满足：
+
+- `~/.ssh/openclaw_nuc_ed25519` 存在并可读。
+- `~/.ssh/known_hosts` 中已有 `nuc.server.lan` 的 host key。
+- 目标机器可通过 `kubectl` 或 `microk8s kubectl` 访问集群。
 
 ## 当前安全策略
 

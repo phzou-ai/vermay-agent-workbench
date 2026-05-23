@@ -17,7 +17,8 @@ class ContextBuilder:
                 content=(
                     "You are a DevOps assistant. Use tools when fresh runtime "
                     "state is needed. Do not claim that a tool action completed "
-                    "unless a tool observation confirms it."
+                    "unless a tool observation confirms it. For current or real "
+                    "Kubernetes cluster state, prefer SSH-backed tools over mock tools."
                 ),
             )
         ]
@@ -40,4 +41,3 @@ class ContextBuilder:
             )
 
         return messages
-

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from .context_builder import ContextBuilder
@@ -22,6 +23,8 @@ def build_runtime(
     trace_name: str = "latest.jsonl",
     ollama_model: str = "deepseek-v4-flash:cloud",
     ollama_base_url: str = "http://127.0.0.1:11434",
+    max_steps: int = 5,
+    show_progress: bool = True,
 ) -> MiniAgentRuntime:
     registry = ToolRegistry()
     register_devops_tools(registry)
@@ -35,6 +38,8 @@ def build_runtime(
         observation_handler=ObservationHandler(),
         memory=MemoryStore(ROOT / "data" / "memory.txt"),
         trace=TraceLogger(ROOT / "traces" / trace_name),
+        max_steps=max_steps,
+        progress=print_progress if show_progress else None,
     )
 
 
@@ -44,6 +49,8 @@ def main() -> None:
     parser.add_argument("--trace", default="latest.jsonl", help="Trace JSONL filename")
     parser.add_argument("--ollama-model", default="deepseek-v4-flash:cloud")
     parser.add_argument("--ollama-base-url", default="http://127.0.0.1:11434")
+    parser.add_argument("--max-steps", type=int, default=5, help="Maximum model calls per run")
+    parser.add_argument("--no-progress", action="store_true", help="Disable progress logs on stderr")
     args = parser.parse_args()
 
     user_input = " ".join(args.prompt).strip() or "check cluster status"
@@ -51,8 +58,14 @@ def main() -> None:
         trace_name=args.trace,
         ollama_model=args.ollama_model,
         ollama_base_url=args.ollama_base_url,
+        max_steps=args.max_steps,
+        show_progress=not args.no_progress,
     )
     print(runtime.run(user_input))
+
+
+def print_progress(message: str) -> None:
+    print(f"[agent] {message}", file=sys.stderr, flush=True)
 
 
 if __name__ == "__main__":

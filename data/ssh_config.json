@@ -1,0 +1,10 @@
+{
+  "target": "phzou@nuc.server.lan",
+  "port": 22,
+  "workspaceRoot": "/home/phzou/openclaw-sandboxes",
+  "strictHostKeyChecking": true,
+  "updateHostKeys": true,
+  "identityFile": "~/.ssh/openclaw_nuc_ed25519",
+  "knownHostsFile": "~/.ssh/known_hosts"
+}
+
