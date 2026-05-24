@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
 
 from .context_builder import ContextBuilder
@@ -9,6 +8,7 @@ from .memory import MemoryStore
 from .model_clients import OllamaModelClient
 from .observation import ObservationHandler
 from .permission import PermissionGate
+from .progress import ProgressReporter
 from .runtime import MiniAgentRuntime
 from .tool_executor import ToolExecutor
 from .tool_registry import ToolRegistry
@@ -39,7 +39,7 @@ def build_runtime(
         memory=MemoryStore(ROOT / "data" / "memory.txt"),
         trace=TraceLogger(ROOT / "traces" / trace_name),
         max_steps=max_steps,
-        progress=print_progress if show_progress else None,
+        progress=ProgressReporter(enabled=show_progress),
     )
 
 
@@ -62,11 +62,6 @@ def main() -> None:
         show_progress=not args.no_progress,
     )
     print(runtime.run(user_input))
-
-
-def print_progress(message: str) -> None:
-    print(f"[agent] {message}", file=sys.stderr, flush=True)
-
 
 if __name__ == "__main__":
     main()

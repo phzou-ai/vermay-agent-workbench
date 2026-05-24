@@ -13,6 +13,7 @@ class OllamaModelClient:
     def __init__(
         self,
         model: str = "deepseek-v4-flash:cloud",
+        # model: str = "kimi-k2.6:cloud",
         base_url: str = "http://127.0.0.1:11434",
         timeout_seconds: int = 120,
     ) -> None:
@@ -46,9 +47,13 @@ class OllamaModelClient:
         try:
             body = json.loads(raw)
             content = body["message"]["content"]
-            decision = json.loads(content)
         except (KeyError, json.JSONDecodeError, TypeError) as exc:
             return ModelResponse(content=f"Invalid Ollama response: {exc}; raw={raw[:1000]}")
+
+        try:
+            decision = json.loads(content)
+        except json.JSONDecodeError:
+            return ModelResponse(content=content)
 
         return self._parse_decision(decision)
 
@@ -102,8 +107,13 @@ class OllamaModelClient:
                 content = json.dumps(content, ensure_ascii=False, indent=2)
             return ModelResponse(content=content)
 
+        if "content" in decision:
+            content = decision["content"]
+            if not isinstance(content, str):
+                content = json.dumps(content, ensure_ascii=False, indent=2)
+            return ModelResponse(content=content)
+
         if "message" in decision or "status" in decision:
             return ModelResponse(content=json.dumps(decision, ensure_ascii=False))
 
         return ModelResponse(content=f"Invalid model action: {decision}")
-

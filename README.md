@@ -17,48 +17,65 @@ Demo 主题：DevOps Assistant。
 
 ## 运行方式
 
+创建并启用本地 Python 环境：
+
 ```bash
 cd /Users/phzou/Documents/Code/AI/agent
-python3 -m mini_agent.main "check cluster status"
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
+```
+
+运行 CLI：
+
+```bash
+cd /Users/phzou/Documents/Code/AI/agent
+mini-agent "check cluster status"
 ```
 
 更多示例：
 
 ```bash
-python3 -m mini_agent.main "show pod status"
-python3 -m mini_agent.main "check real cluster pods"
-python3 -m mini_agent.main "grep nginx errors"
-python3 -m mini_agent.main "read nginx log"
-python3 -m mini_agent.main "apply deployment fix"
+mini-agent "show pod status"
+mini-agent "check real cluster pods"
+mini-agent "grep nginx errors"
+mini-agent "read nginx log"
+mini-agent "apply deployment fix"
 ```
 
 默认模型是 Ollama 中的 `deepseek-v4-flash:cloud`。
 
-CLI 默认会在 stderr 输出进度日志，用于区分模型调用、工具执行和最终回答阶段：
+CLI 默认会在 stderr 输出 Rich trace view，用于观察完整 harness loop：
 
 ```text
-[agent] step 1/5: building context
-[agent] step 1/5: calling model
-[agent] step 1/5: model response Calling tool ssh_kubectl_get.
-[agent] step 1/5: tool_call {"name": "ssh_kubectl_get", "arguments": {"resource": "pods"}}
-[agent] step 1/5: permission allowed=True requires_approval=False reason=safe tool
-[agent] step 1/5: executing tool ssh_kubectl_get
-[agent] step 1/5: tool_result ok=True exit_code=0 command=ssh ...
-[agent] step 1/5: observation {"ok": true, ...}
+Agent Run
+Step 1 · Context Build
+Step 1 · Model Call
+Step 1 · Model Response
+Step 1 · Tool Call
+Step 1 · Permission Gate
+Step 1 · Tool Execute
+Step 1 · Tool Result
+Step 1 · Observation
+Step 2 · Context Build
+Step 2 · Model Call
+Step 2 · Model Response
+Step 2 · Final Answer
 ```
 
-完整结构化轨迹写入 `traces/*.jsonl`，包含每次 model response、tool call、permission decision、tool result 和 observation。
+完整机器可读轨迹写入 `traces/*.jsonl`，包含每次 model response、tool call、permission decision、tool result 和 observation。
 
 如需只保留最终 stdout：
 
 ```bash
-python3 -m mini_agent.main "check real cluster pods" --no-progress
+mini-agent "check real cluster pods" --no-progress
 ```
 
 限制最大模型调用次数：
 
 ```bash
-python3 -m mini_agent.main "check real cluster pods" --max-steps 3
+mini-agent "check real cluster pods" --max-steps 3
 ```
 
 ## 使用 Ollama
@@ -73,13 +90,13 @@ ollama list
 运行：
 
 ```bash
-python3 -m mini_agent.main "check cluster status"
+mini-agent "check cluster status"
 ```
 
 也可以换成本机已有模型：
 
 ```bash
-python3 -m mini_agent.main "grep nginx errors" \
+mini-agent "grep nginx errors" \
   --ollama-model qwen3.6:27b
 ```
 
@@ -127,8 +144,8 @@ data/ssh_config.json
 示例：
 
 ```bash
-python3 -m mini_agent.main "check real cluster pods"
-python3 -m mini_agent.main "describe real api pod in default namespace"
+mini-agent "check real cluster pods"
+mini-agent "describe real api pod in default namespace"
 ```
 
 SSH 工具使用严格 allowlist，不暴露任意 SSH 命令执行。当前支持：
