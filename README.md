@@ -252,3 +252,10 @@ traces/
 - UI
 
 这些内容后续阶段再加入。
+
+## 项目文档
+
+当前 runtime 的现状报告和后续 LangGraph 取舍记录位于：
+
+- [docs/agent-runtime/README.md](docs/agent-runtime/README.md)
+- [docs/agent-runtime/current-state.md](docs/agent-runtime/current-state.md)
