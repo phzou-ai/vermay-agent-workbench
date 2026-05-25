@@ -13,6 +13,7 @@ from .runtime import MiniAgentRuntime
 from .tool_executor import ToolExecutor
 from .tool_registry import ToolRegistry
 from .tools.devops import register_devops_tools
+from .tools.weather import register_weather_tools
 from .trace import TraceLogger
 
 
@@ -28,6 +29,7 @@ def build_runtime(
 ) -> MiniAgentRuntime:
     registry = ToolRegistry()
     register_devops_tools(registry)
+    register_weather_tools(registry)
 
     return MiniAgentRuntime(
         model=OllamaModelClient(model=ollama_model, base_url=ollama_base_url),
