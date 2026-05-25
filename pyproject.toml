@@ -7,10 +7,10 @@ name = "mini-agent-workbench"
 version = "0.1.0"
 description = "A minimal handwritten agent runtime for studying harness mechanics."
 requires-python = ">=3.11"
-dependencies = ["rich>=13.7"]
+dependencies = ["rich>=13.7", "pytest>=8.0", "langgraph>=1.0"]
 
 [project.scripts]
 mini-agent = "mini_agent.main:main"
 
 [tool.setuptools.packages.find]
-include = ["mini_agent*"]
+include = ["mini_agent*", "mini_agent_langgraph*"]

@@ -353,13 +353,13 @@ These items are intentionally deferred because the current milestone is to close
 
 Recommended next sequence:
 
-1. Freeze this handwritten runtime as the Phase 1 baseline.
-2. Add a small test set for the current parser, permission, and tool boundaries if the baseline needs protection before refactor.
-3. Create a LangGraph implementation that reproduces the same loop with one safe tool call and one final answer.
-4. Add the existing SSH Kubernetes and weather tools to the LangGraph path.
-5. Add checkpointing and human-in-the-loop resume.
-6. Add streaming and improved tracing.
-7. Decide which path becomes the main extension point for memory, skills, model routing, MCP, and evaluation.
+1. Completed: freeze this handwritten runtime as the Phase 1 baseline with minimal tests.
+2. Completed: create a parallel `mini_agent_langgraph/` implementation that reproduces the same loop with one safe tool call and one final answer in tests.
+3. Add the existing SSH Kubernetes and weather tools to the LangGraph path.
+4. Add checkpointing and human-in-the-loop resume.
+5. Add streaming and improved tracing.
+6. Decide which path becomes the main extension point for memory, skills, model routing, MCP, and evaluation.
 
-The immediate next implementation should be a LangGraph baseline, not more capabilities in the handwritten runtime.
+The immediate next implementation should verify current tool parity in the LangGraph runtime, not add unrelated capabilities to the handwritten runtime.
 
+The detailed Phase 2 implementation plan is maintained in [langgraph-implementation-plan.md](langgraph-implementation-plan.md).

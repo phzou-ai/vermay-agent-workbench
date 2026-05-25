@@ -20,8 +20,9 @@ It is a Phase 1 learning implementation, not the target production architecture.
 ## Reading Order
 
 1. [current-state.md](current-state.md) - current implementation, decisions, deferred work, and next step.
-2. [../../README.md](../../README.md) - CLI usage, environment setup, tool examples, and repository structure.
-3. Runtime entry points:
+2. [langgraph-implementation-plan.md](langgraph-implementation-plan.md) - evaluated Phase 2 plan and batch implementation order.
+3. [../../README.md](../../README.md) - CLI usage, environment setup, tool examples, and repository structure.
+4. Runtime entry points:
    - [../../mini_agent/runtime.py](../../mini_agent/runtime.py)
    - [../../mini_agent/main.py](../../mini_agent/main.py)
    - [../../mini_agent/context_builder.py](../../mini_agent/context_builder.py)
@@ -52,7 +53,16 @@ Freeze the handwritten runtime as the Phase 1 baseline, then implement a LangGra
 
 The LangGraph version should reproduce the same behavior before adding new capabilities. The first comparison should focus on control flow, checkpointing, human-in-the-loop support, streaming, tracing, and how much custom harness logic remains outside the graph.
 
+The LangGraph implementation should live in a separate top-level package:
+
+```text
+mini_agent_langgraph/
+```
+
+The existing `mini_agent/` package remains the handwritten runtime baseline and shared harness module source.
+
+The concrete batch plan is recorded in [langgraph-implementation-plan.md](langgraph-implementation-plan.md).
+
 ## Do Not Expand Yet
 
 Do not add MCP, A2A, self-evolving behavior, complex memory, or arbitrary SSH execution to this Phase 1 runtime before the LangGraph comparison exists.
-

@@ -50,8 +50,17 @@ class OllamaModelClient:
         except (KeyError, json.JSONDecodeError, TypeError) as exc:
             return ModelResponse(content=f"Invalid Ollama response: {exc}; raw={raw[:1000]}")
 
+        return self._parse_content(content)
+
+    def _parse_content(self, content: str) -> ModelResponse:
+        normalized = content.strip()
+        if normalized.startswith("```"):
+            lines = normalized.splitlines()
+            if len(lines) >= 3 and lines[0].startswith("```") and lines[-1].strip() == "```":
+                normalized = "\n".join(lines[1:-1]).strip()
+
         try:
-            decision = json.loads(content)
+            decision = json.loads(normalized)
         except json.JSONDecodeError:
             return ModelResponse(content=content)
 

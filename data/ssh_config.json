@@ -1,7 +1,6 @@
 {
   "target": "phzou@home.phzou.com",
   "port": 22622,
-  "workspaceRoot": "/home/phzou/openclaw-sandboxes",
   "strictHostKeyChecking": true,
   "updateHostKeys": true,
   "identityFile": "~/.ssh/openclaw_nuc_ed25519",

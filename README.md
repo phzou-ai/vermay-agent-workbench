@@ -34,6 +34,12 @@ cd /Users/phzou/Documents/Code/AI/agent
 mini-agent "check cluster status"
 ```
 
+默认 runtime 是 Phase 1 handwritten runtime。可切换到 Phase 2 LangGraph runtime：
+
+```bash
+mini-agent "grep nginx errors" --runtime langgraph
+```
+
 更多示例：
 
 ```bash
@@ -77,6 +83,12 @@ mini-agent "check real cluster pods" --no-progress
 
 ```bash
 mini-agent "check real cluster pods" --max-steps 3
+```
+
+运行测试：
+
+```bash
+.venv/bin/python -m pytest
 ```
 
 ## 使用 Ollama
@@ -129,7 +141,6 @@ data/ssh_config.json
 {
   "target": "phzou@nuc.server.lan",
   "port": 22,
-  "workspaceRoot": "/home/phzou/openclaw-sandboxes",
   "strictHostKeyChecking": true,
   "updateHostKeys": true,
   "identityFile": "~/.ssh/openclaw_nuc_ed25519",
@@ -222,6 +233,13 @@ mini_agent/
   memory.py
   trace.py
   main.py
+mini_agent_langgraph/
+  state.py
+  graph.py
+  nodes.py
+  routing.py
+  adapters.py
+  runner.py
 data/
   cluster.json
   nginx.log
