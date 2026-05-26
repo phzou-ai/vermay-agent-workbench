@@ -1,4 +1,4 @@
-"""LangGraph runtime for Mini Agent Workbench Phase 2."""
+"""LangGraph runtime for Mini Agent Workbench."""
 
 from .runner import LangGraphAgentRuntime
 

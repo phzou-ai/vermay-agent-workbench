@@ -85,7 +85,7 @@ class LangGraphAgentRuntime:
         if skills:
             self.trace.log_event(
                 "langgraph_skills_ignored",
-                {"skill_count": len(skills), "reason": "Batch 1 does not implement skill injection."},
+                {"skill_count": len(skills), "reason": "Skill injection is not implemented in the current runtime."},
             )
 
         self.trace.log_event("langgraph_run_started", {"user_input": user_input})

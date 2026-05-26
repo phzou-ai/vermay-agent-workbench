@@ -1,25 +1,21 @@
 # Mini Agent Workbench
 
-本项目用于学习 Agent Harness 的底层机制。
+Mini Agent Workbench is a Python project for validating and practicing agent runtime patterns in concrete command-line workflows.
 
-当前默认 runtime 是 Phase 2 LangGraph runtime。Phase 1 handwritten runtime 保留为 harness 参考实现。
+The current default runtime is LangGraph. The project keeps the core harness boundaries explicit so agent behavior can be inspected, tested, and extended without hiding tool execution, permission checks, or observations inside a single opaque node.
 
-项目目标是显式展示 Agent runtime 中的核心组件：
+Current focus:
 
-- Context builder
-- Tool registry
-- Tool executor
-- Observation handler
-- Permission gate
-- Trace logger
-- Error recovery
-- Minimal model client
+- LangGraph orchestration.
+- Tool calling through an explicit registry and executor.
+- Permission control before dangerous operations.
+- Approval interrupt and resume.
+- SSH-backed read-only Kubernetes inspection.
+- External read-only data tools.
+- Human-readable progress output.
+- JSONL audit traces.
 
-Demo 主题：DevOps Assistant。
-
-## 运行方式
-
-创建并启用本地 Python 环境：
+## Install
 
 ```bash
 cd <repo-root>
@@ -29,89 +25,30 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 ```
 
-运行 CLI：
+## Run
 
 ```bash
-cd <repo-root>
 mini-agent "check cluster status"
+mini-agent "check real cluster pods"
+mini-agent "grep nginx errors"
+mini-agent "weather forecast for Shanghai"
 ```
 
-默认 runtime 是 Phase 2 LangGraph runtime：
+The LangGraph runtime is the default:
 
 ```bash
 mini-agent "grep nginx errors"
 ```
 
-可显式切换回 Phase 1 handwritten runtime：
+The compact handwritten runtime remains available:
 
 ```bash
 mini-agent "grep nginx errors" --runtime handwritten
 ```
 
-更多示例：
+## Ollama Configuration
 
-```bash
-mini-agent "show pod status"
-mini-agent "check real cluster pods"
-mini-agent "grep nginx errors"
-mini-agent "weather forecast for Shanghai"
-mini-agent "read nginx log"
-mini-agent "apply deployment fix"
-```
-
-默认模型是 Ollama 中的 `deepseek-v4-flash:cloud`。
-
-CLI 默认会在 stderr 输出 Rich trace view，用于观察完整 harness loop：
-
-```text
-Agent Run
-Step 1 · Context Build
-Step 1 · Model Call
-Step 1 · Model Response
-Step 1 · Tool Call
-Step 1 · Permission Gate
-Step 1 · Tool Execute
-Step 1 · Tool Result
-Step 1 · Observation
-Step 2 · Context Build
-Step 2 · Model Call
-Step 2 · Model Response
-Step 2 · Final Answer
-```
-
-完整机器可读轨迹写入 `traces/*.jsonl`，包含每次 model response、tool call、permission decision、tool result 和 observation。
-
-LangGraph runtime 还支持可选的 graph stream inspection，用于对照 LangGraph 原生事件与当前 harness trace：
-
-```bash
-mini-agent "grep nginx errors" --graph-stream
-mini-agent "grep nginx errors" --graph-stream-mode updates --graph-stream-mode values --no-progress
-mini-agent "grep nginx errors" --graph-stream-mode updates,custom,debug
-```
-
-默认 stream mode 为 `updates,custom`。`updates` 显示 graph node 的状态增量，`values` 显示完整 state 摘要，`debug` 显示 checkpoint/task 事件，`custom` 显示当前 harness 主动发出的语义事件。
-
-如需只保留最终 stdout：
-
-```bash
-mini-agent "check real cluster pods" --no-progress
-```
-
-限制最大模型调用次数：
-
-```bash
-mini-agent "check real cluster pods" --max-steps 3
-```
-
-运行测试：
-
-```bash
-.venv/bin/python -m pytest
-```
-
-## 使用 Ollama
-
-.env 中提供默认模型配置：
+Default model configuration is read from `.env`, then overridden by `.env.local`, `.env.dev.local`, shell environment variables, and finally CLI flags.
 
 ```bash
 MINI_AGENT_OLLAMA_MODEL=deepseek-v4-flash:cloud
@@ -119,29 +56,7 @@ MINI_AGENT_OLLAMA_BASE_URL=http://127.0.0.1:11434
 MINI_AGENT_OLLAMA_TIMEOUT_SECONDS=120
 ```
 
-`.env.local` 或 shell 环境变量可以覆盖这些默认值。
-
-先确认 Ollama 已启动，并且模型可用：
-
-```bash
-ollama serve
-ollama list
-```
-
-运行：
-
-```bash
-mini-agent "check cluster status"
-```
-
-也可以换成本机已有模型：
-
-```bash
-mini-agent "grep nginx errors" \
-  --ollama-model qwen3.6:27b
-```
-
-CLI 参数优先级高于 `.env` / `.env.local`：
+Example CLI override:
 
 ```bash
 mini-agent "grep nginx errors" \
@@ -150,31 +65,23 @@ mini-agent "grep nginx errors" \
   --ollama-timeout-seconds 120
 ```
 
-Ollama adapter 使用本地 HTTP `/api/chat`，要求模型返回严格 JSON：
+The Ollama adapter uses `/api/chat` and expects a JSON action protocol:
 
 ```json
 {"action":"final","content":"..."}
 ```
 
-或：
+or:
 
 ```json
-{"action":"tool_call","name":"kubectl_get","arguments":{"resource":"pods"}}
+{"action":"tool_call","name":"tool_name","arguments":{}}
 ```
 
-## 使用真实 Kubernetes 集群
+## SSH Kubernetes Configuration
 
-Demo 同时提供 mock 工具和 SSH-backed 只读工具。
+Real cluster inspection is available through allowlisted read-only SSH Kubernetes tools.
 
-SSH 配置通过环境变量提供。
-
-仓库提交脱敏默认配置：
-
-```text
-.env
-```
-
-本地真实配置可放在 `.env.local` 或 `.env.dev.local`，这些文件不会提交到 Git，并会覆盖 `.env`。
+Local configuration should be placed in `.env.local` or exported in the shell:
 
 ```bash
 MINI_AGENT_SSH_TARGET=user@example-host
@@ -183,160 +90,100 @@ MINI_AGENT_SSH_IDENTITY_FILE=~/.ssh/example_ed25519
 MINI_AGENT_SSH_KNOWN_HOSTS_FILE=~/.ssh/known_hosts
 ```
 
-SSH host key 校验固定启用：
+The SSH client always uses:
 
 ```text
 StrictHostKeyChecking=yes
 UpdateHostKeys=yes
 ```
 
-只读 SSH 工具：
+Supported read-only tools:
 
 - `ssh_kubectl_get`
 - `ssh_kubectl_describe`
 
-示例：
-
-```bash
-mini-agent "check real cluster pods"
-mini-agent "describe real api pod in default namespace"
-```
-
-SSH 工具使用严格 allowlist，不暴露任意 SSH 命令执行。当前支持：
+Supported operations:
 
 - `kubectl get pods|services|deployments|nodes|namespaces|events`
 - `kubectl describe pod|service|deployment|node`
 
-远端 Kubernetes 命令会按顺序尝试：
+## Approval Resume
 
-1. `kubectl`
-2. `microk8s kubectl`
-3. `/snap/bin/microk8s kubectl`
-
-这用于兼容 MicroK8s 在非交互 SSH shell 中 `/snap/bin` 不在 PATH 的情况。
-
-本机需要满足：
-
-- `.env.local` 或 `.env.dev.local` 中存在 SSH 配置，或同名环境变量已在 shell 中导出。
-- 配置中的 SSH identity file 存在并可读。
-- `known_hosts` 中已有目标机器的 host key。
-- 目标机器可通过 `kubectl` 或 `microk8s kubectl` 访问集群。
-
-## 使用天气工具
-
-天气工具：
-
-- `weather_forecast`
-
-示例：
+Dangerous tools are interrupted before execution and require explicit resume:
 
 ```bash
-mini-agent "weather forecast for Shanghai"
-mini-agent "will it rain in San Francisco tomorrow?"
+mini-agent "apply deployment fix" --thread-id approval-session
+mini-agent --thread-id approval-session --resume-approval false --approval-reason "not allowed"
+mini-agent --thread-id approval-session --resume-approval true --approval-reason "approved"
 ```
 
-该工具通过 `wttr.in` 获取当前天气和 1-3 天天气预报，属于安全只读工具。
+Checkpoint data is stored locally in:
 
-## 当前安全策略
+```text
+traces/langgraph_checkpoints.sqlite
+```
 
-危险工具不会自动执行。
+## Observability
 
-当前危险工具：
-
-- `exec_shell`
-- `kubectl_apply`
-- `delete_resource`
-
-当模型请求危险工具时，runtime 会记录 approval_required 事件并停止执行。
-
-LangGraph runtime 支持 checkpoint-backed approval resume。危险工具会先暂停并返回 `thread_id`：
+Progress output is written to stderr by default.
 
 ```bash
-mini-agent "apply deployment fix" --thread-id demo-approval
+mini-agent "check real cluster pods" --no-progress
 ```
 
-拒绝执行：
+LangGraph stream inspection is optional:
 
 ```bash
-mini-agent --thread-id demo-approval --resume-approval false --approval-reason "not allowed"
+mini-agent "grep nginx errors" --graph-stream
+mini-agent "grep nginx errors" --graph-stream-mode updates,custom,debug
+mini-agent "grep nginx errors" --graph-stream-mode updates --graph-stream-mode values --no-progress
 ```
 
-批准执行：
+JSONL traces are written to:
 
-```bash
-mini-agent --thread-id demo-approval --resume-approval true --approval-reason "approved"
+```text
+traces/*.jsonl
 ```
 
-checkpoint 数据保存在本地 `traces/langgraph_checkpoints.sqlite`，该文件不会提交到 Git。
-
-## 目录结构
+## Project Structure
 
 ```text
 mini_agent/
-  infra/
-    ssh.py
-  model_clients/
-    ollama.py
-    protocol.py
-  tools/
-    devops/
-      registry.py
-      mock.py
-      remote_kubernetes.py
-      dangerous.py
-    weather/
-      registry.py
-      forecast.py
-  runtime.py
+  main.py
   context_builder.py
   tool_registry.py
   tool_executor.py
-  observation.py
   permission.py
-  memory.py
+  observation.py
+  progress.py
   trace.py
-  main.py
+  model_clients/
+  tools/
+  infra/
+
 mini_agent_langgraph/
   state.py
   graph.py
   nodes.py
   routing.py
-  adapters.py
   runner.py
-data/
-  cluster.json
-  nginx.log
-.env
-traces/
+  streaming.py
+
+docs/
+  README.md
+  overview.md
+  modules.md
+  operations.md
 ```
 
-## Phase 1 范围
+## Documentation
 
-包含：
+Stable project documentation is under [docs/README.md](docs/README.md).
 
-- 最小 agent loop
-- mock tools
-- 危险工具审批拦截
-- observation 格式化
-- JSONL trace
-- 简单短期 memory
-- error recovery 基础路径
+Planning notes and historical implementation records are kept outside this repository in the companion `mini-agent-docs` workspace.
 
-不包含：
+## Tests
 
-- LangGraph
-- MCP
-- A2A
-- 长期 memory
-- 多模型路由
-- self-evolving
-- UI
-
-这些内容后续阶段再加入。
-
-## 项目文档
-
-当前 runtime 的现状报告和后续 LangGraph 取舍记录位于：
-
-- [docs/agent-runtime/README.md](docs/agent-runtime/README.md)
-- [docs/agent-runtime/current-state.md](docs/agent-runtime/current-state.md)
+```bash
+.venv/bin/python -m pytest
+```

@@ -1,11 +1,10 @@
 def exec_shell(command: str) -> dict:
-    return {"command": command, "status": "not_executed_in_demo"}
+    return {"command": command, "status": "placeholder_not_executed"}
 
 
 def kubectl_apply(manifest: str) -> dict:
-    return {"manifest": manifest, "status": "not_applied_in_demo"}
+    return {"manifest": manifest, "status": "placeholder_not_applied"}
 
 
 def delete_resource(resource: str, name: str) -> dict:
-    return {"resource": resource, "name": name, "status": "not_deleted_in_demo"}
-
+    return {"resource": resource, "name": name, "status": "placeholder_not_deleted"}
