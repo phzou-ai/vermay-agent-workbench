@@ -4,6 +4,7 @@ import json
 import urllib.error
 import urllib.request
 
+from mini_agent.env_config import load_prefixed_env
 from mini_agent.types import Message, ModelResponse, ToolCall
 
 
@@ -12,14 +13,22 @@ class OllamaModelClient:
 
     def __init__(
         self,
-        model: str = "deepseek-v4-flash:cloud",
-        # model: str = "kimi-k2.6:cloud",
-        base_url: str = "http://127.0.0.1:11434",
-        timeout_seconds: int = 120,
+        model: str | None = None,
+        base_url: str | None = None,
+        timeout_seconds: int | None = None,
     ) -> None:
-        self.model = model
-        self.base_url = base_url.rstrip("/")
-        self.timeout_seconds = timeout_seconds
+        config = self._load_config()
+        self.model = model or config["model"]
+        self.base_url = (base_url or config["base_url"]).rstrip("/")
+        self.timeout_seconds = timeout_seconds if timeout_seconds is not None else config["timeout_seconds"]
+
+    def _load_config(self) -> dict:
+        values = load_prefixed_env("MINI_AGENT_OLLAMA_")
+        return {
+            "model": values.get("MINI_AGENT_OLLAMA_MODEL", "deepseek-v4-flash:cloud"),
+            "base_url": values.get("MINI_AGENT_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
+            "timeout_seconds": int(values.get("MINI_AGENT_OLLAMA_TIMEOUT_SECONDS", "120")),
+        }
 
     def invoke(self, messages: list[Message], tools: list[dict]) -> ModelResponse:
         ollama_messages = self._to_ollama_messages(messages, tools)

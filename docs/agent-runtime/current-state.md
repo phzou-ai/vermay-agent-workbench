@@ -66,11 +66,15 @@ The default model is:
 deepseek-v4-flash:cloud
 ```
 
-The adapter talks to the local Ollama HTTP API:
+The model, base URL, and timeout are configured through `.env`, `.env.local`, `.env.dev.local`, or shell environment variables:
 
 ```text
-http://127.0.0.1:11434/api/chat
+MINI_AGENT_OLLAMA_MODEL
+MINI_AGENT_OLLAMA_BASE_URL
+MINI_AGENT_OLLAMA_TIMEOUT_SECONDS
 ```
+
+CLI arguments can override these values for a single run.
 
 The runtime asks the model to use a small JSON action protocol:
 

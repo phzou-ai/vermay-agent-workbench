@@ -93,6 +93,16 @@ mini-agent "check real cluster pods" --max-steps 3
 
 ## 使用 Ollama
 
+.env 中提供默认模型配置：
+
+```bash
+MINI_AGENT_OLLAMA_MODEL=deepseek-v4-flash:cloud
+MINI_AGENT_OLLAMA_BASE_URL=http://127.0.0.1:11434
+MINI_AGENT_OLLAMA_TIMEOUT_SECONDS=120
+```
+
+`.env.local` 或 shell 环境变量可以覆盖这些默认值。
+
 先确认 Ollama 已启动，并且模型可用：
 
 ```bash
@@ -111,6 +121,15 @@ mini-agent "check cluster status"
 ```bash
 mini-agent "grep nginx errors" \
   --ollama-model qwen3.6:27b
+```
+
+CLI 参数优先级高于 `.env` / `.env.local`：
+
+```bash
+mini-agent "grep nginx errors" \
+  --ollama-model qwen3.6:27b \
+  --ollama-base-url http://127.0.0.1:11434 \
+  --ollama-timeout-seconds 120
 ```
 
 Ollama adapter 使用本地 HTTP `/api/chat`，要求模型返回严格 JSON：

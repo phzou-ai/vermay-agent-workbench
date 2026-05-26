@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 from pathlib import Path
 
+from mini_agent.env_config import load_prefixed_env
 
 ROOT = Path(__file__).resolve().parents[2]
-
-ENV_FILES = (".env", ".env.local", ".env.dev.local")
 
 
 class SshClient:
@@ -48,7 +46,7 @@ class SshClient:
         if self.config_path is not None:
             return json.loads(self.config_path.read_text(encoding="utf-8"))
 
-        values = self._load_env_values()
+        values = load_prefixed_env("MINI_AGENT_SSH_", root=ROOT)
         required = {
             "target": values.get("MINI_AGENT_SSH_TARGET"),
             "port": values.get("MINI_AGENT_SSH_PORT"),
@@ -69,38 +67,6 @@ class SshClient:
             "identityFile": required["identityFile"],
             "knownHostsFile": required["knownHostsFile"],
         }
-
-    def _load_env_values(self) -> dict[str, str]:
-        values: dict[str, str] = {}
-        for name in ENV_FILES:
-            path = ROOT / name
-            if path.exists():
-                values.update(self._parse_env_file(path))
-
-        for key in (
-            "MINI_AGENT_SSH_TARGET",
-            "MINI_AGENT_SSH_PORT",
-            "MINI_AGENT_SSH_IDENTITY_FILE",
-            "MINI_AGENT_SSH_KNOWN_HOSTS_FILE",
-        ):
-            if key in os.environ:
-                values[key] = os.environ[key]
-        return values
-
-    def _parse_env_file(self, path: Path) -> dict[str, str]:
-        values: dict[str, str] = {}
-        for raw_line in path.read_text(encoding="utf-8").splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            values[key.strip()] = self._strip_env_value(value.strip())
-        return values
-
-    def _strip_env_value(self, value: str) -> str:
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            return value[1:-1]
-        return value
 
     def _base_command(self) -> list[str]:
         config = self.config
