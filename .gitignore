@@ -9,4 +9,5 @@ __pycache__/
 
 data/memory.txt
 traces/*.jsonl
+traces/*.sqlite
 !traces/.gitkeep

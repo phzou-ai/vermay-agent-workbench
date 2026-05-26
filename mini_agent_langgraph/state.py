@@ -11,6 +11,7 @@ class AgentState(TypedDict):
     observations: list[Observation]
     tool_call: ToolCall | None
     permission_decision: PermissionDecision | None
+    approval_result: dict[str, Any] | None
     tool_result: ToolResult | None
     observation: Observation | None
     final_answer: str | None

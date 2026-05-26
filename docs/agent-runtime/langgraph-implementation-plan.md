@@ -207,7 +207,7 @@ Scope:
 - Completed: defined `AgentState`.
 - Completed: implemented `build_context`, `call_model`, `check_permission`, `execute_tool`, `handle_observation`, and `increment_step` nodes.
 - Completed: implemented routing functions for response, permission, and step limit.
-- Completed: added a new CLI path without changing the default handwritten runtime path.
+- Completed: added a new CLI path. The CLI default was later switched to LangGraph after Batch 1 stabilization.
 
 Recommended CLI shape:
 
@@ -221,7 +221,7 @@ Acceptance criteria:
 - Completed: the graph loops back after observation in tests.
 - Completed: the graph returns a final answer in tests.
 - Completed: `max_steps` is enforced in tests.
-- Completed: existing handwritten runtime remains the default.
+- Superseded: existing handwritten runtime no longer remains the default. It is still available through `--runtime handwritten`.
 
 Current implementation files:
 
@@ -250,34 +250,53 @@ Temporary progress bridge:
 
 ### Batch 2: Reuse Full Current Tool Set
 
+Status: Completed.
+
 Goal: make the LangGraph runtime support the same safe tools as the handwritten runtime.
 
 Scope:
 
-- Register existing DevOps tools.
-- Register existing SSH Kubernetes tools.
-- Register existing weather tool.
-- Keep dangerous tools registered but blocked by permission policy.
-- Reuse `ToolRegistry`, `ToolExecutor`, `PermissionGate`, and `ObservationHandler`.
+- Completed: register existing DevOps tools.
+- Completed: register existing SSH Kubernetes tools.
+- Completed: register existing weather tool.
+- Completed: keep dangerous tools registered but blocked by permission policy.
+- Completed: reuse `ToolRegistry`, `ToolExecutor`, `PermissionGate`, and `ObservationHandler`.
 
 Acceptance criteria:
 
-- `mini-agent "check real cluster pods" --runtime langgraph` works.
-- `mini-agent "check k8s status and the age of phzou.core service" --runtime langgraph` works.
-- `mini-agent "weather forecast for Shanghai" --runtime langgraph` works.
-- Tool results and observations remain visible in trace output.
+- Completed: `mini-agent "check real cluster pods"` works with the default LangGraph runtime.
+- Completed: `mini-agent "weather forecast for Shanghai"` works with the default LangGraph runtime.
+- Completed: mock DevOps tools work with the default LangGraph runtime.
+- Completed: dangerous tool requests remain blocked before execution.
+- Completed: tool results and observations remain visible in progress output and JSONL trace.
+
+Test coverage:
+
+```bash
+.venv/bin/python -m pytest tests/test_langgraph_tool_parity.py
+```
+
+Smoke commands run:
+
+```bash
+mini-agent "grep nginx errors" --max-steps 3 --no-progress
+mini-agent "weather forecast for Shanghai" --max-steps 3 --no-progress
+mini-agent "check real cluster pods" --max-steps 3 --no-progress
+```
 
 ### Batch 3: Approval Interrupt and Resume
+
+Status: Completed.
 
 Goal: replace the handwritten runtime's approval stop with LangGraph interrupt/resume.
 
 Scope:
 
-- Add a checkpointer.
-- Require or auto-generate `thread_id` for approval-capable runs.
-- Implement `approval_interrupt` node.
-- Resume with `Command(resume=...)`.
-- Add CLI options for approval and rejection resume.
+- Completed: added SQLite checkpointer for CLI persistence.
+- Completed: added `thread_id` support; runs auto-generate a thread id when none is provided.
+- Completed: implemented approval interrupt in the `approval_required` node.
+- Completed: resume with `Command(resume=...)`.
+- Completed: added CLI options for approval and rejection resume.
 
 Possible CLI shape:
 
@@ -289,28 +308,77 @@ mini-agent --runtime langgraph --thread-id demo-1 --resume-approval false
 
 Acceptance criteria:
 
-- Dangerous tool call pauses with a structured approval payload.
-- State is checkpointed.
-- Resume with approval continues execution.
-- Resume with rejection ends cleanly.
-- Tool execution does not happen before approval.
+- Completed: dangerous tool call pauses with a structured approval payload.
+- Completed: state is checkpointed in `traces/langgraph_checkpoints.sqlite`.
+- Completed: resume with approval continues execution.
+- Completed: resume with rejection ends cleanly.
+- Completed: tool execution does not happen before approval.
+
+Implemented CLI shape:
+
+```bash
+mini-agent "apply deployment fix" --thread-id demo-1
+mini-agent --thread-id demo-1 --resume-approval true --approval-reason "approved"
+mini-agent --thread-id demo-1 --resume-approval false --approval-reason "not allowed"
+```
+
+Test coverage:
+
+```bash
+.venv/bin/python -m pytest tests/test_langgraph_runtime.py
+```
 
 ### Batch 4: Streaming and Trace Comparison
 
 Goal: compare LangGraph runtime events with current `ProgressReporter` and `TraceLogger`.
 
+Status: completed.
+
 Scope:
 
-- Use graph streaming for `updates`, `values`, and `custom` events.
+- Use graph streaming for `updates`, `values`, `debug`, and `custom` events.
 - Keep JSONL trace as domain-specific audit log.
-- Add custom stream events for harness-level milestones if needed.
+- Add custom stream events for harness-level milestones.
 - Document which progress events are provided by LangGraph and which remain custom.
+
+Implementation:
+
+- Added `mini_agent_langgraph/streaming.py`.
+- Added CLI options:
+  - `--graph-stream`
+  - `--graph-stream-mode`
+- `--graph-stream` uses `graph.stream(...)` instead of `graph.invoke(...)` for the initial run.
+- Default stream modes are `updates,custom`.
+- `updates` reports graph node state deltas.
+- `values` reports full state snapshots in summarized form.
+- `debug` reports LangGraph checkpoint/task events.
+- `custom` reports harness-defined events emitted from graph nodes.
+- Existing `ProgressReporter` and `TraceLogger` remain in place.
+
+Current comparison:
+
+| Layer | Source | Purpose |
+| --- | --- | --- |
+| `ProgressReporter` | project harness | Human-readable harness loop view. |
+| LangGraph `updates` | graph runtime | Node-level state transition inspection. |
+| LangGraph `values` | graph runtime | Full state snapshot inspection. |
+| LangGraph `debug` | graph runtime | Checkpoint/task-level runtime events. |
+| LangGraph `custom` | project graph nodes | Harness milestone events carried through LangGraph stream. |
+| JSONL trace | project harness | Domain-specific audit trail with full tool and observation payloads. |
 
 Acceptance criteria:
 
-- Terminal output can show graph node progress.
-- JSONL trace still records model response, tool call, permission decision, tool result, observation, and final answer.
-- A short comparison is added to this document or a follow-up trace document.
+- Completed: terminal output can show graph node progress through `--graph-stream`.
+- Completed: JSONL trace still records model response, tool call, permission decision, tool result, observation, and final answer.
+- Completed: comparison recorded in this section.
+
+Example commands:
+
+```bash
+mini-agent "grep nginx errors" --graph-stream
+mini-agent "grep nginx errors" --graph-stream-mode updates --graph-stream-mode values --no-progress
+mini-agent "grep nginx errors" --graph-stream-mode updates,custom,debug
+```
 
 ### Batch 5: ToolNode Evaluation
 
@@ -393,7 +461,7 @@ Live tests for Ollama, SSH, and weather can be kept as manual smoke tests.
 
 - Do not delete the handwritten runtime.
 - Keep the LangGraph runtime in top-level `mini_agent_langgraph/`, not inside `mini_agent/`.
-- Do not change default CLI runtime until the LangGraph version reaches feature parity for current demos.
+- Completed: default CLI runtime has been switched to LangGraph after current safe tool parity was verified. The handwritten runtime remains available through `--runtime handwritten`.
 - Do not add MCP, A2A, self-evolving behavior, complex memory, or model routing during Phase 2 baseline work.
 - Do not use arbitrary SSH execution as a shortcut.
 - Do not hide permission checks inside tools without an explicit graph-level decision.
@@ -402,9 +470,9 @@ Live tests for Ollama, SSH, and weather can be kept as manual smoke tests.
 
 ## Next Step
 
-Start with Batch 2.
+Start with Batch 5.
 
-Batch 0 and Batch 1 are complete. Batch 2 should verify the LangGraph runtime with the full current tool set, including SSH Kubernetes and weather tools, while keeping the default runtime unchanged.
+Batch 0 through Batch 4 are complete. Batch 5 should evaluate whether LangGraph `ToolNode` should be adopted, while keeping `PermissionGate` explicit before execution.
 
 ## References
 

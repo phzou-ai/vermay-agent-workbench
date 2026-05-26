@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
+
+from langgraph.config import get_stream_writer
+from langgraph.types import interrupt
 
 from mini_agent.context_builder import ContextBuilder
 from mini_agent.memory import MemoryStore
@@ -57,6 +61,12 @@ def build_context_node(components: GraphComponents):
                 for message in messages
             ],
         )
+        _emit_stream_event(
+            "context_built",
+            step=step,
+            messages=len(messages),
+            observations=len(state["observations"]),
+        )
         return {"messages": messages}
 
     return node
@@ -80,6 +90,12 @@ def call_model_node(components: GraphComponents):
             step,
             "model_response",
             content=response.content,
+            tool=tool_call.name if tool_call else None,
+        )
+        _emit_stream_event(
+            "model_response",
+            step=step,
+            has_tool_call=tool_call is not None,
             tool=tool_call.name if tool_call else None,
         )
         if tool_call is None:
@@ -113,6 +129,13 @@ def check_permission_node(components: GraphComponents):
             approval=decision.requires_approval,
             reason=decision.reason,
         )
+        _emit_stream_event(
+            "permission_checked",
+            step=state["step"],
+            allowed=decision.allowed,
+            requires_approval=decision.requires_approval,
+            reason=decision.reason,
+        )
         return {"permission_decision": decision}
 
     return node
@@ -120,11 +143,20 @@ def check_permission_node(components: GraphComponents):
 
 def reject_tool_node(components: GraphComponents):
     def node(state: AgentState) -> dict:
+        approval = state.get("approval_result") or {}
+        if approval.get("approved") is False:
+            reason = approval.get("reason") or "approval rejected"
+            message = f"Tool call rejected by approval: {reason}"
+            components.trace.log_event("langgraph_tool_rejected", {"step": state["step"], "message": message})
+            _emit_stream_event("tool_rejected", step=state["step"], message=message)
+            return {"final_answer": message}
+
         decision = state["permission_decision"]
         message = "Tool call rejected."
         if decision is not None:
             message = f"Tool call rejected: {decision.reason}"
         components.trace.log_event("langgraph_tool_rejected", {"step": state["step"], "message": message})
+        _emit_stream_event("tool_rejected", step=state["step"], message=message)
         return {"final_answer": message}
 
     return node
@@ -142,7 +174,30 @@ def approval_required_node(components: GraphComponents):
             {"step": state["step"], "tool_call": tool_call_payload(tool_call), "message": message},
         )
         components.progress.event(state["step"], "approval_required", tool=tool_name)
-        return {"final_answer": message}
+        _emit_stream_event("approval_required", step=state["step"], tool=tool_name, reason=reason)
+        resume = interrupt(
+            {
+                "kind": "approval_required",
+                "step": state["step"],
+                "tool_call": tool_call_payload(tool_call),
+                "permission": permission_payload(decision),
+                "message": message,
+            }
+        )
+        if isinstance(resume, dict):
+            approved = bool(resume.get("approved"))
+            reason = str(resume.get("reason") or ("approved" if approved else "approval rejected"))
+        else:
+            approved = bool(resume)
+            reason = "approved" if approved else "approval rejected"
+
+        result = {"approved": approved, "reason": reason}
+        components.trace.log_event(
+            "langgraph_approval_resumed",
+            {"step": state["step"], "tool_call": tool_call_payload(tool_call), "approval": result},
+        )
+        _emit_stream_event("approval_resumed", step=state["step"], approved=approved, reason=reason)
+        return {"approval_result": result}
 
     return node
 
@@ -171,6 +226,13 @@ def execute_tool_node(components: GraphComponents):
             exit_code=_tool_exit_code(result.output),
             command_summary=_tool_command_summary(result.output),
         )
+        _emit_stream_event(
+            "tool_result",
+            step=state["step"],
+            tool=result.name,
+            ok=result.ok,
+            exit_code=_tool_exit_code(result.output),
+        )
         return {"tool_result": result}
 
     return node
@@ -197,6 +259,13 @@ def handle_observation_node(components: GraphComponents):
             tool=observation.tool_name,
             ok=observation.ok,
             summary=_observation_summary(tool_result.output, observation.content),
+        )
+        _emit_stream_event(
+            "observation",
+            step=state["step"],
+            tool=observation.tool_name,
+            ok=observation.ok,
+            observations=len(observations),
         )
         return {"observation": observation, "observations": observations}
 
@@ -239,12 +308,22 @@ def _observation_summary(output: object, content: str) -> str:
 
 def increment_step_node(_: GraphComponents):
     def node(state: AgentState) -> dict:
+        _emit_stream_event("step_incremented", step=state["step"], next_step=state["step"] + 1)
         return {
             "step": state["step"] + 1,
             "tool_call": None,
             "permission_decision": None,
+            "approval_result": None,
             "tool_result": None,
             "observation": None,
         }
 
     return node
+
+
+def _emit_stream_event(event: str, **fields: Any) -> None:
+    try:
+        writer = get_stream_writer()
+    except Exception:
+        return
+    writer({"event": event, **fields})

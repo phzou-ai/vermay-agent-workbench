@@ -2,7 +2,7 @@
 
 ## Scope
 
-This domain documents the current handwritten Mini Agent Workbench runtime.
+This domain documents the Mini Agent Workbench runtimes.
 
 The runtime was created to study and verify the mechanics of an agent harness:
 
@@ -15,7 +15,7 @@ The runtime was created to study and verify the mechanics of an agent harness:
 - trace logging
 - loop control
 
-It is a Phase 1 learning implementation, not the target production architecture.
+The handwritten runtime is a Phase 1 learning implementation. The LangGraph runtime is now the default CLI runtime.
 
 ## Reading Order
 
@@ -45,13 +45,12 @@ Current capabilities include:
 - SSH-backed read-only Kubernetes tools for real cluster inspection.
 - Weather forecast tool as a safe external data source.
 - Rich terminal trace for human-readable harness inspection.
+- Optional LangGraph stream inspection for graph-level events.
 - JSONL trace for complete machine-readable run history.
 
 ## Recommended Next Step
 
-Freeze the handwritten runtime as the Phase 1 baseline, then implement a LangGraph version of the same workflow.
-
-The LangGraph version should reproduce the same behavior before adding new capabilities. The first comparison should focus on control flow, checkpointing, human-in-the-loop support, streaming, tracing, and how much custom harness logic remains outside the graph.
+Proceed to Batch 5: evaluate whether LangGraph `ToolNode` should be adopted.
 
 The LangGraph implementation should live in a separate top-level package:
 
@@ -65,4 +64,4 @@ The concrete batch plan is recorded in [langgraph-implementation-plan.md](langgr
 
 ## Do Not Expand Yet
 
-Do not add MCP, A2A, self-evolving behavior, complex memory, or arbitrary SSH execution to this Phase 1 runtime before the LangGraph comparison exists.
+Do not add MCP, A2A, self-evolving behavior, complex memory, or arbitrary SSH execution before the LangGraph baseline and ToolNode decision are recorded.

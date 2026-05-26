@@ -22,6 +22,13 @@ def route_after_permission(state: AgentState) -> str:
     return "denied"
 
 
+def route_after_approval(state: AgentState) -> str:
+    approval = state.get("approval_result") or {}
+    if approval.get("approved") is True:
+        return "approved"
+    return "rejected"
+
+
 def route_after_step(state: AgentState) -> str:
     if state["step"] > state["max_steps"]:
         return "max_steps"

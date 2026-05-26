@@ -15,7 +15,7 @@ The current implementation is intended to make the runtime loop explicit:
 7. rebuild context with observations
 8. repeat until final answer or step limit
 
-The project is now at a natural Phase 1 stopping point. The handwritten implementation has enough functionality to serve as a reference baseline. The next architectural question is whether to reproduce the same workflow with LangGraph while preserving flexibility where custom harness logic remains useful.
+The project has moved past the Phase 1 stopping point. The handwritten implementation remains a reference baseline, while the CLI default is now the Phase 2 LangGraph runtime.
 
 ## Current State
 
@@ -167,7 +167,7 @@ The runtime does not expose arbitrary SSH command execution.
 
 ### Observability
 
-There are two tracing layers.
+There are three observability layers.
 
 Human-readable terminal trace:
 
@@ -175,13 +175,20 @@ Human-readable terminal trace:
 - shows context build, model call, model response, tool call, permission, tool result, observation, and final answer
 - optimized for studying harness behavior during a run
 
+LangGraph stream inspection:
+
+- enabled explicitly with `--graph-stream`
+- supports `updates`, `values`, `debug`, and `custom`
+- exposes graph node updates, state snapshots, checkpoint/task events, and harness-defined custom milestones
+- intended for comparing graph orchestration events with the existing harness-level trace
+
 Machine-readable JSONL trace:
 
 - written by `TraceLogger`
 - stored in `traces/*.jsonl`
 - preserves full event payloads, including complete tool results and observations
 
-The terminal trace is intentionally summarized so it remains readable. Full payload inspection belongs in the JSONL trace.
+The terminal trace is intentionally summarized so it remains readable. LangGraph stream inspection is also summarized in the terminal. Full payload inspection belongs in the JSONL trace.
 
 ### Verified Scenarios
 
@@ -258,7 +265,7 @@ It demonstrates that the harness is not limited to DevOps tools. Tool registrati
 
 ## Code Quality Evaluation
 
-The current code is adequate for a Phase 1 learning baseline.
+The current code is adequate for the Phase 2 LangGraph baseline. The handwritten runtime is still adequate as a Phase 1 learning reference.
 
 Good current boundaries:
 
@@ -269,19 +276,16 @@ Good current boundaries:
 - permission policy is centralized
 - terminal trace and JSONL trace are separate
 
-Areas that should not be over-refactored before LangGraph:
+Areas that should not be over-refactored yet:
 
 - `MiniAgentRuntime` is still intentionally central; this is useful for reading the loop.
 - synchronous execution is acceptable for the current CLI demo.
 - memory is intentionally minimal.
-- approval currently stops the run instead of implementing resume.
+- the custom LangGraph tool node remains useful until `ToolNode` is evaluated.
 
-Refactors worth considering after the LangGraph comparison:
+Refactors worth considering after `ToolNode` evaluation:
 
 - introduce a formal observer interface for terminal progress and JSONL tracing
-- add tests for model response parsing
-- add tests for permission decisions
-- add tests for remote Kubernetes command construction
 - add tests for weather result normalization
 - make observation summarization configurable per tool
 - define richer typed metadata for `ToolResult`
@@ -295,14 +299,14 @@ Known risks:
 
 ## LangGraph Consideration
 
-Switching to LangGraph is appropriate for Phase 2, but it should not replace the handwritten runtime immediately.
+LangGraph is now the Phase 2 default runtime. The handwritten runtime remains in the repository as a reference baseline.
 
-The recommended approach is:
+The current approach is:
 
 1. keep the handwritten runtime as the explicit harness reference
-2. implement a second LangGraph workflow that reproduces the same behavior
-3. compare what LangGraph provides against what the handwritten runtime made explicit
-4. move future expansion to the LangGraph path only after the same baseline behavior works
+2. use the LangGraph workflow as the default CLI runtime
+3. compare new capabilities against what the handwritten runtime made explicit
+4. move future expansion to the LangGraph path
 
 Suggested LangGraph mapping:
 
@@ -330,19 +334,15 @@ The comparison should evaluate:
 - whether tracing becomes more complete or more fragmented
 - whether memory and skills are easier to add as nodes
 
-Do not begin MCP, A2A, or self-evolving work before the LangGraph baseline exists.
+Do not begin MCP, A2A, or self-evolving work before the LangGraph baseline and ToolNode decision are recorded.
 
 ## Deferred / TODO
 
 Current deferred items:
 
-- LangGraph version of the same workflow.
-- Parser tests for strict JSON, plain markdown, malformed JSON, and content-only JSON.
-- Unit tests for tool registry, permission gate, and tool executor failure handling.
-- Tests for SSH Kubernetes allowlist and command generation.
 - Tests for weather response normalization.
-- Real human approval resume flow.
 - Streaming model output.
+- ToolNode evaluation.
 - Skill loading, retrieval, and injection.
 - Real memory write and retrieval policies.
 - Model routing.
@@ -351,7 +351,7 @@ Current deferred items:
 - Evaluation datasets and trajectory evaluation.
 - Self-evolving skill proposal workflow.
 
-These items are intentionally deferred because the current milestone is to close Phase 1 and prepare a clean Phase 2 comparison.
+These items are intentionally deferred because the current milestone is to finish the Phase 2 LangGraph baseline before expanding into broader agent platform topics.
 
 ## Next Step
 
@@ -359,11 +359,12 @@ Recommended next sequence:
 
 1. Completed: freeze this handwritten runtime as the Phase 1 baseline with minimal tests.
 2. Completed: create a parallel `mini_agent_langgraph/` implementation that reproduces the same loop with one safe tool call and one final answer in tests.
-3. Add the existing SSH Kubernetes and weather tools to the LangGraph path.
-4. Add checkpointing and human-in-the-loop resume.
-5. Add streaming and improved tracing.
-6. Decide which path becomes the main extension point for memory, skills, model routing, MCP, and evaluation.
+3. Completed: add the existing SSH Kubernetes and weather tools to the LangGraph path.
+4. Completed: add checkpointing and human-in-the-loop resume.
+5. Completed: add LangGraph stream inspection and compare it with progress and JSONL tracing.
+6. Evaluate whether LangGraph `ToolNode` should be adopted.
+7. Decide which path becomes the main extension point for memory, skills, model routing, MCP, and evaluation.
 
-The immediate next implementation should verify current tool parity in the LangGraph runtime, not add unrelated capabilities to the handwritten runtime.
+The immediate next implementation should evaluate `ToolNode` against the current custom tool execution node.
 
 The detailed Phase 2 implementation plan is maintained in [langgraph-implementation-plan.md](langgraph-implementation-plan.md).

@@ -13,11 +13,11 @@ from .nodes import (
     increment_step_node,
     reject_tool_node,
 )
-from .routing import route_after_model, route_after_permission, route_after_step
+from .routing import route_after_approval, route_after_model, route_after_permission, route_after_step
 from .state import AgentState
 
 
-def build_graph(components: GraphComponents):
+def build_graph(components: GraphComponents, checkpointer=None):
     graph = StateGraph(AgentState)
 
     graph.add_node("build_context", build_context_node(components))
@@ -48,7 +48,14 @@ def build_graph(components: GraphComponents):
             "allowed": "execute_tool",
         },
     )
-    graph.add_edge("approval_required", END)
+    graph.add_conditional_edges(
+        "approval_required",
+        route_after_approval,
+        {
+            "approved": "execute_tool",
+            "rejected": "reject_tool",
+        },
+    )
     graph.add_edge("reject_tool", END)
     graph.add_edge("execute_tool", "handle_observation")
     graph.add_edge("handle_observation", "increment_step")
@@ -61,4 +68,4 @@ def build_graph(components: GraphComponents):
         },
     )
 
-    return graph.compile()
+    return graph.compile(checkpointer=checkpointer)

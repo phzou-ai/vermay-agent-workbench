@@ -2,7 +2,9 @@
 
 本项目用于学习 Agent Harness 的底层机制。
 
-当前实现为 Phase 1：手写 mini runtime，不依赖 LangGraph。目标是显式展示 Agent runtime 中的核心组件：
+当前默认 runtime 是 Phase 2 LangGraph runtime。Phase 1 handwritten runtime 保留为 harness 参考实现。
+
+项目目标是显式展示 Agent runtime 中的核心组件：
 
 - Context builder
 - Tool registry
@@ -34,10 +36,16 @@ cd <repo-root>
 mini-agent "check cluster status"
 ```
 
-默认 runtime 是 Phase 1 handwritten runtime。可切换到 Phase 2 LangGraph runtime：
+默认 runtime 是 Phase 2 LangGraph runtime：
 
 ```bash
-mini-agent "grep nginx errors" --runtime langgraph
+mini-agent "grep nginx errors"
+```
+
+可显式切换回 Phase 1 handwritten runtime：
+
+```bash
+mini-agent "grep nginx errors" --runtime handwritten
 ```
 
 更多示例：
@@ -72,6 +80,16 @@ Step 2 · Final Answer
 ```
 
 完整机器可读轨迹写入 `traces/*.jsonl`，包含每次 model response、tool call、permission decision、tool result 和 observation。
+
+LangGraph runtime 还支持可选的 graph stream inspection，用于对照 LangGraph 原生事件与当前 harness trace：
+
+```bash
+mini-agent "grep nginx errors" --graph-stream
+mini-agent "grep nginx errors" --graph-stream-mode updates --graph-stream-mode values --no-progress
+mini-agent "grep nginx errors" --graph-stream-mode updates,custom,debug
+```
+
+默认 stream mode 为 `updates,custom`。`updates` 显示 graph node 的状态增量，`values` 显示完整 state 摘要，`debug` 显示 checkpoint/task 事件，`custom` 显示当前 harness 主动发出的语义事件。
 
 如需只保留最终 stdout：
 
@@ -230,6 +248,26 @@ mini-agent "will it rain in San Francisco tomorrow?"
 - `delete_resource`
 
 当模型请求危险工具时，runtime 会记录 approval_required 事件并停止执行。
+
+LangGraph runtime 支持 checkpoint-backed approval resume。危险工具会先暂停并返回 `thread_id`：
+
+```bash
+mini-agent "apply deployment fix" --thread-id demo-approval
+```
+
+拒绝执行：
+
+```bash
+mini-agent --thread-id demo-approval --resume-approval false --approval-reason "not allowed"
+```
+
+批准执行：
+
+```bash
+mini-agent --thread-id demo-approval --resume-approval true --approval-reason "approved"
+```
+
+checkpoint 数据保存在本地 `traces/langgraph_checkpoints.sqlite`，该文件不会提交到 Git。
 
 ## 目录结构
 
