@@ -1,8 +1,0 @@
-{
-  "target": "user@example-host",
-  "port": 22,
-  "strictHostKeyChecking": true,
-  "updateHostKeys": true,
-  "identityFile": "~/.ssh/example_ed25519",
-  "knownHostsFile": "~/.ssh/known_hosts"
-}

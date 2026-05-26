@@ -31,7 +31,7 @@ The project has a local Python environment and an editable package setup.
 Typical command:
 
 ```bash
-cd /Users/phzou/Documents/Code/AI/agent
+cd <repo-root>
 source .venv/bin/activate
 mini-agent "check real cluster pods"
 ```
@@ -118,7 +118,7 @@ SSH-backed Kubernetes tools:
 - `ssh_kubectl_get`
 - `ssh_kubectl_describe`
 
-These inspect the real MicroK8s cluster through local SSH configuration in `data/ssh_config.local.json`. The repository keeps only the sanitized example file `data/ssh_config.json`. The real local config is ignored by Git.
+These inspect the real MicroK8s cluster through local environment configuration. The repository keeps a sanitized `.env`; real local files such as `.env.local` and `.env.dev.local` are ignored by Git and override `.env`.
 
 Dangerous placeholder tools:
 

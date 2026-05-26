@@ -4,8 +4,9 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
+.env.local
+.env.*.local
 
 data/memory.txt
-data/ssh_config.local.json
 traces/*.jsonl
 !traces/.gitkeep
