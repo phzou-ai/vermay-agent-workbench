@@ -41,6 +41,7 @@ class LangGraphAgentRuntime:
             observation_handler=self.observation_handler,
             memory=self.memory,
             trace=self.trace,
+            progress=self.progress,
         )
         self.graph = build_graph(components)
 

@@ -242,6 +242,12 @@ Test command:
 .venv/bin/python -m pytest tests/test_langgraph_runtime.py
 ```
 
+Temporary progress bridge:
+
+- Added after Batch 1 to make LangGraph runs readable before the formal Batch 4 streaming work.
+- LangGraph nodes now call the existing `ProgressReporter` for context build, model call, model response, tool call, permission, tool execution, tool result, observation, final answer, and approval required events.
+- This is not a replacement for LangGraph streaming. Batch 4 should still compare graph stream modes with the project JSONL trace and progress reporter.
+
 ### Batch 2: Reuse Full Current Tool Set
 
 Goal: make the LangGraph runtime support the same safe tools as the handwritten runtime.
