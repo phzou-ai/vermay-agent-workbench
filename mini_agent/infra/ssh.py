@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class SshClient:
     def __init__(self, config_path: Path | None = None, timeout_seconds: int = 20) -> None:
-        self.config_path = config_path or ROOT / "data" / "ssh_config.json"
+        self.config_path = config_path or ROOT / "data" / "ssh_config.local.json"
         self.timeout_seconds = timeout_seconds
         self.config = self._load_config()
 
@@ -42,6 +42,12 @@ class SshClient:
         }
 
     def _load_config(self) -> dict:
+        if not self.config_path.exists():
+            example_path = ROOT / "data" / "ssh_config.json"
+            raise FileNotFoundError(
+                f"SSH config not found: {self.config_path}. "
+                f"Create it from the example config: {example_path}"
+            )
         return json.loads(self.config_path.read_text(encoding="utf-8"))
 
     def _base_command(self) -> list[str]:
@@ -74,4 +80,3 @@ class SshClient:
             if part == "-i":
                 skip_next = True
         return " ".join(redacted)
-

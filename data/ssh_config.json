@@ -1,9 +1,8 @@
 {
-  "target": "phzou@home.phzou.com",
-  "port": 22622,
+  "target": "user@example-host",
+  "port": 22,
   "strictHostKeyChecking": true,
   "updateHostKeys": true,
-  "identityFile": "~/.ssh/openclaw_nuc_ed25519",
+  "identityFile": "~/.ssh/example_ed25519",
   "knownHostsFile": "~/.ssh/known_hosts"
 }
-

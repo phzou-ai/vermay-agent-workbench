@@ -6,5 +6,6 @@ __pycache__/
 .mypy_cache/
 
 data/memory.txt
+data/ssh_config.local.json
 traces/*.jsonl
 !traces/.gitkeep

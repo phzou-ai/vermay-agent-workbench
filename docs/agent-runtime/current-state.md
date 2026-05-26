@@ -118,7 +118,7 @@ SSH-backed Kubernetes tools:
 - `ssh_kubectl_get`
 - `ssh_kubectl_describe`
 
-These inspect the real MicroK8s cluster through SSH configuration in `data/ssh_config.json`. They are read-only and allowlisted.
+These inspect the real MicroK8s cluster through local SSH configuration in `data/ssh_config.local.json`. The repository keeps only the sanitized example file `data/ssh_config.json`. The real local config is ignored by Git.
 
 Dangerous placeholder tools:
 
