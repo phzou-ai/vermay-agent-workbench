@@ -1,5 +1,7 @@
 from mini_agent import env_config
 from mini_agent.model_clients.ollama import OllamaModelClient
+from urllib.error import HTTPError
+from io import BytesIO
 
 
 def test_ollama_client_loads_env_file_config(tmp_path, monkeypatch):
@@ -47,3 +49,17 @@ def test_ollama_client_explicit_args_override_env_config(tmp_path, monkeypatch):
     assert client.model == "override-model"
     assert client.base_url == "http://override.example"
     assert client.timeout_seconds == 9
+
+
+def test_ollama_client_formats_http_error_body():
+    error = HTTPError(
+        url="http://127.0.0.1:11434/api/chat",
+        code=503,
+        msg="Service Unavailable",
+        hdrs={},
+        fp=BytesIO(b'{"error":"model overloaded"}'),
+    )
+
+    message = OllamaModelClient()._format_http_error(error)
+
+    assert message == "Ollama request failed: HTTP 503 Service Unavailable: model overloaded"

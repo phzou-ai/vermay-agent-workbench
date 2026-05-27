@@ -173,8 +173,6 @@ def approval_required_node(components: GraphComponents):
             "langgraph_approval_required",
             {"step": state["step"], "tool_call": tool_call_payload(tool_call), "message": message},
         )
-        components.progress.event(state["step"], "approval_required", tool=tool_name)
-        _emit_stream_event("approval_required", step=state["step"], tool=tool_name, reason=reason)
         resume = interrupt(
             {
                 "kind": "approval_required",
@@ -184,6 +182,7 @@ def approval_required_node(components: GraphComponents):
                 "message": message,
             }
         )
+        _emit_stream_event("approval_resumed_from_interrupt", step=state["step"], tool=tool_name)
         if isinstance(resume, dict):
             approved = bool(resume.get("approved"))
             reason = str(resume.get("reason") or ("approved" if approved else "approval rejected"))

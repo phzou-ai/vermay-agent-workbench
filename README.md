@@ -123,6 +123,10 @@ For an interactive terminal flow in the same process:
 mini-agent "apply deployment fix" --interactive-approval
 ```
 
+Interactive approval asks at most once per run by default. If the model requests another dangerous tool after approval, the run stops instead of repeatedly prompting.
+
+The default progress output is an indented agent transcript written to stderr.
+
 Checkpoint data is stored locally in:
 
 ```text

@@ -50,6 +50,8 @@ class OllamaModelClient:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 raw = response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            return ModelResponse(content=self._format_http_error(exc))
         except urllib.error.URLError as exc:
             return ModelResponse(content=f"Ollama request failed: {exc}")
 
@@ -60,6 +62,26 @@ class OllamaModelClient:
             return ModelResponse(content=f"Invalid Ollama response: {exc}; raw={raw[:1000]}")
 
         return self._parse_content(content)
+
+    def _format_http_error(self, exc: urllib.error.HTTPError) -> str:
+        detail = ""
+        try:
+            body = exc.read().decode("utf-8")
+        except Exception:
+            body = ""
+
+        if body:
+            try:
+                payload = json.loads(body)
+                error = payload.get("error")
+                if isinstance(error, str):
+                    detail = f": {error}"
+                else:
+                    detail = f": {body[:1000]}"
+            except json.JSONDecodeError:
+                detail = f": {body[:1000]}"
+
+        return f"Ollama request failed: HTTP {exc.code} {exc.reason}{detail}"
 
     def _parse_content(self, content: str) -> ModelResponse:
         normalized = content.strip()

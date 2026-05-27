@@ -180,7 +180,9 @@ def main() -> None:
 
 
 def _prompt_for_approval(message: str, thread_id: str) -> tuple[bool, str | None]:
-    print(message)
+    for line in message.splitlines():
+        if not line.startswith("Resume with:"):
+            print(line)
     while True:
         try:
             value = input(f"Approve tool execution for thread {thread_id}? [yes/no]: ").strip().lower()

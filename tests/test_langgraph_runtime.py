@@ -199,6 +199,28 @@ def test_langgraph_runtime_interactive_approval_execution(tmp_path: Path):
     assert '"executed": true' in model.calls[1][-1].content
 
 
+def test_langgraph_runtime_interactive_approval_stops_after_round_limit(tmp_path: Path):
+    model = FakeModel(
+        [
+            ModelResponse(content="Calling tool dangerous.", tool_call=ToolCall(name="dangerous")),
+            ModelResponse(content="Calling tool dangerous.", tool_call=ToolCall(name="dangerous")),
+        ]
+    )
+    runtime = build_test_runtime(tmp_path, model)
+    prompts = 0
+
+    def approve(message: str, thread_id: str) -> tuple[bool, str]:
+        nonlocal prompts
+        prompts += 1
+        return True, "approved interactively"
+
+    answer = runtime.run_with_interactive_approval("run dangerous action", approve)
+
+    assert answer == "Stopped after 1 approval rounds."
+    assert prompts == 1
+    assert len(model.calls) == 2
+
+
 def test_langgraph_runtime_resumes_approval_from_sqlite_checkpoint(tmp_path: Path):
     checkpoint_path = tmp_path / "checkpoints.sqlite"
     first_model = FakeModel(

@@ -4,125 +4,153 @@ import json
 import sys
 from typing import Any
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.text import Text
-
 
 class ProgressReporter:
     def __init__(self, enabled: bool = True) -> None:
         self.enabled = enabled
-        self.console = Console(file=sys.stderr, force_terminal=True, color_system="auto")
+        self._last_step: int | None = None
 
     def event(self, step: int | None, event: str, **fields: Any) -> None:
         if not self.enabled:
             return
-
-        if event == "run_started":
-            self._run_started(fields)
-        elif event == "context_built":
-            self._context_built(step, fields)
-        elif event == "model_call_start":
-            self._simple(step, "Model Call", "Sending current context and tool schemas to the model.", "cyan")
-        elif event == "model_response":
-            self._model_response(step, fields)
-        elif event == "tool_call":
-            self._json_panel(step, "Tool Call", fields["payload"], "yellow")
-        elif event == "permission":
-            self._permission(step, fields)
-        elif event == "tool_execute_start":
-            self._simple(step, "Tool Execute", f"Executing {fields['tool']}", "yellow")
-        elif event == "tool_result":
-            self._tool_result(step, fields)
-        elif event == "observation":
-            self._observation(step, fields)
-        elif event == "final_answer":
-            self._simple(step, "Final Answer", "Model returned a final answer. Agent loop stops.", "green")
-        elif event == "approval_required":
-            self._simple(step, "Approval Required", f"Tool requires approval: {fields['tool']}", "red")
-        elif event == "max_steps_reached":
-            self._simple(None, "Max Steps Reached", f"Stopped after {fields['max_steps']} model calls.", "red")
-        elif event.endswith("_start"):
+        if event.endswith("_start") and event != "model_call_start" and event != "tool_execute_start":
             return
-        else:
-            self._simple(step, event, self._preview(str(fields)), "white")
 
-    def _run_started(self, fields: dict[str, Any]) -> None:
-        content = Text()
-        content.append("input: ", style="bold")
-        content.append(str(fields["input"]))
-        content.append("\nmax_steps: ", style="bold")
-        content.append(str(fields["max_steps"]))
-        self.console.print(Panel(content, title="Agent Run", border_style="bold blue"))
+        line = self._format_event(step, event, fields)
+        if line:
+            print(line, file=sys.stderr, flush=True)
 
-    def _context_built(self, step: int | None, fields: dict[str, Any]) -> None:
-        roles = []
-        for message in fields["message_preview"]:
-            label = message["role"]
-            if message.get("name"):
-                label += f":{message['name']}"
-            roles.append(label)
-        content = (
-            f"messages: {fields['messages']}\n"
-            f"observations: {fields['observations']}\n"
-            f"roles: {' -> '.join(roles)}"
-        )
-        self.console.print(Panel(content, title=self._title(step, "Context Build"), border_style="magenta"))
+    def _format_event(self, step: int | None, event: str, fields: dict[str, Any]) -> str | None:
+        if event == "run_started":
+            self._last_step = None
+            return f"> {self._input_summary(str(fields['input']))}  max_steps={fields['max_steps']}"
+        if event == "context_built":
+            self._step_header(step)
+            roles = []
+            for message in fields["message_preview"]:
+                role = message["role"]
+                if message.get("name"):
+                    role += f":{message['name']}"
+                roles.append(role)
+            return (
+                f"  {'context':<11} messages={fields['messages']} "
+                f"observations={fields['observations']} roles={' -> '.join(roles)}"
+            )
+        if event == "model_call_start":
+            self._step_header(step)
+            return f"  {'model':<11} call"
+        if event == "model_response":
+            self._step_header(step)
+            if fields.get("tool"):
+                return f"  {'model':<11} tool_request name={fields['tool']}"
+            return f"  {'model':<11} final {self._content_summary(fields['content'])}"
+        if event == "tool_call":
+            self._step_header(step)
+            payload = fields["payload"]
+            name = payload.get("name") if isinstance(payload, dict) else None
+            args = payload.get("arguments") if isinstance(payload, dict) else payload
+            return f"  {'tool_call':<11} name={name} args={self._args_summary(args)}"
+        if event == "permission":
+            self._step_header(step)
+            status = "allowed" if fields["allowed"] else "blocked"
+            return (
+                f"  {'permission':<11} {status} "
+                f"approval={fields['approval']} reason={fields['reason']}"
+            )
+        if event == "tool_execute_start":
+            self._step_header(step)
+            return f"  {'execute':<11} tool={fields['tool']}"
+        if event == "tool_result":
+            self._step_header(step)
+            parts = [f"  {'result':<11} tool={fields['tool']} ok={fields['ok']}"]
+            if fields.get("exit_code") is not None:
+                parts.append(f"exit_code={fields['exit_code']}")
+            if fields.get("command_summary"):
+                parts.append(f"cmd={self._preview(str(fields['command_summary']), 140, True)}")
+            return " ".join(parts)
+        if event == "observation":
+            self._step_header(step)
+            return (
+                f"  {'observation':<11} tool={fields['tool']} ok={fields['ok']} "
+                f"{self._summary_preview(fields['summary'])}"
+            )
+        if event == "final_answer":
+            self._step_header(step)
+            return f"  {'done':<11} final_answer"
+        if event == "approval_required":
+            self._step_header(step)
+            return f"  {'approval':<11} required tool={fields['tool']}"
+        if event == "approval_resumed":
+            self._step_header(step)
+            return f"  {'approval':<11} resumed tool={fields['tool']}"
+        if event == "max_steps_reached":
+            return f"stopped max_steps={fields['max_steps']}"
+        if not event.endswith("_start"):
+            self._step_header(step)
+            return f"  {event:<11} {self._preview(str(fields), 180, True)}"
+        return None
 
-    def _model_response(self, step: int | None, fields: dict[str, Any]) -> None:
-        title = self._title(step, "Model Response")
-        content = self._preview(fields["content"], 700)
-        if fields.get("tool"):
-            content += f"\n\nnext: tool_call -> {fields['tool']}"
-        else:
-            content += "\n\nnext: final_answer"
-        self.console.print(Panel(content, title=title, border_style="cyan"))
-
-    def _permission(self, step: int | None, fields: dict[str, Any]) -> None:
-        status = "allowed" if fields["allowed"] else "blocked"
-        style = "green" if fields["allowed"] else "red"
-        content = (
-            f"status: {status}\n"
-            f"requires_approval: {fields['approval']}\n"
-            f"reason: {fields['reason']}"
-        )
-        self.console.print(Panel(content, title=self._title(step, "Permission Gate"), border_style=style))
-
-    def _tool_result(self, step: int | None, fields: dict[str, Any]) -> None:
-        lines = [
-            f"tool: {fields['tool']}",
-            f"ok: {fields['ok']}",
-        ]
-        if fields.get("exit_code") is not None:
-            lines.append(f"exit_code: {fields['exit_code']}")
-        if fields.get("command_summary"):
-            lines.append(f"command: {fields['command_summary']}")
-        self.console.print(Panel("\n".join(lines), title=self._title(step, "Tool Result"), border_style="yellow"))
-
-    def _observation(self, step: int | None, fields: dict[str, Any]) -> None:
-        content = (
-            f"tool: {fields['tool']}\n"
-            f"ok: {fields['ok']}\n\n"
-            f"{fields['summary']}"
-        )
-        self.console.print(Panel(content, title=self._title(step, "Observation"), border_style="blue"))
-
-    def _json_panel(self, step: int | None, title: str, payload: Any, color: str) -> None:
-        text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
-        syntax = Syntax(text, "json", theme="ansi_dark", word_wrap=True)
-        self.console.print(Panel(syntax, title=self._title(step, title), border_style=color))
-
-    def _simple(self, step: int | None, title: str, message: str, color: str) -> None:
-        self.console.print(Panel(message, title=self._title(step, title), border_style=color))
-
-    def _title(self, step: int | None, label: str) -> str:
-        if step is None:
-            return label
-        return f"Step {step} · {label}"
+    def _step_header(self, step: int | None) -> None:
+        if step is None or self._last_step == step:
+            return
+        if self._last_step is not None:
+            print("", file=sys.stderr, flush=True)
+        print(f"step {step}", file=sys.stderr, flush=True)
+        self._last_step = step
 
     def _preview(self, value: str, limit: int = 500, single_line: bool = False) -> str:
         text = value.replace("\n", "\\n") if single_line else value
         if len(text) > limit:
             return text[:limit] + "...<truncated>"
         return text
+
+    def _input_summary(self, value: str) -> str:
+        lines = value.splitlines()
+        first_line = lines[0] if lines else value
+        if "\n" in value:
+            return f"{self._preview(first_line, 90, single_line=True)} <{len(value)} chars, {len(lines)} lines>"
+        if len(value) > 120:
+            return f"{self._preview(value, 90, single_line=True)} <{len(value)} chars>"
+        return value
+
+    def _args_summary(self, value: Any) -> str:
+        if isinstance(value, dict):
+            parts = []
+            for key, item in value.items():
+                parts.append(f"{key}={self._value_summary(item)}")
+            return "{" + ", ".join(parts) + "}"
+        return self._value_summary(value)
+
+    def _value_summary(self, value: Any) -> str:
+        if isinstance(value, str):
+            line_count = value.count("\n") + 1
+            if "\n" in value:
+                return f"<{len(value)} chars, {line_count} lines>"
+            if len(value) > 80:
+                return f"<{len(value)} chars>"
+            return json.dumps(value, ensure_ascii=False)
+        if isinstance(value, (int, float, bool)) or value is None:
+            return json.dumps(value, ensure_ascii=False)
+        try:
+            rendered = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        except TypeError:
+            rendered = str(value)
+        if len(rendered) > 120:
+            return f"<{type(value).__name__}, {len(rendered)} chars>"
+        return rendered
+
+    def _content_summary(self, value: Any) -> str:
+        text = str(value)
+        if "\n" in text:
+            lines = text.splitlines()
+            first_line = lines[0] if lines else ""
+            return f"{self._preview(first_line, 120, single_line=True)} <{len(text)} chars, {len(lines)} lines>"
+        return self._preview(text, 180, single_line=True)
+
+    def _summary_preview(self, value: Any) -> str:
+        text = str(value)
+        if "\n" in text:
+            lines = text.splitlines()
+            first_line = lines[0] if lines else ""
+            return f"{self._preview(first_line, 120, single_line=True)} <{len(text)} chars, {len(lines)} lines>"
+        return self._preview(text, 180, single_line=True)

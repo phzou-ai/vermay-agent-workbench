@@ -30,3 +30,15 @@ def test_observation_summary_prefers_stdout_preview():
 
 def test_observation_summary_falls_back_to_content():
     assert observation_summary("plain", "content") == "content"
+
+
+def test_observation_summary_prefers_status_from_output():
+    assert observation_summary({"status": "placeholder_not_applied", "manifest": "apiVersion: v1"}, "fallback") == (
+        "status=placeholder_not_applied"
+    )
+
+
+def test_observation_summary_prefers_status_from_json_content():
+    assert observation_summary(None, '{"status":"placeholder_not_applied","manifest":"apiVersion: v1"}') == (
+        "status=placeholder_not_applied"
+    )

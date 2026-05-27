@@ -117,7 +117,7 @@ class LangGraphAgentRuntime:
         approval_provider: Callable[[str, str], tuple[bool, str | None]],
         skills: list[str] | None = None,
         stream_modes: Sequence[str] | None = None,
-        max_approval_rounds: int = 3,
+        max_approval_rounds: int = 1,
     ) -> str:
         answer = self.run(user_input, skills=skills, stream_modes=stream_modes)
         approval_rounds = 0

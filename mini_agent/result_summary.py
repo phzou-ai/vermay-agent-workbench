@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 
 
@@ -24,6 +25,10 @@ def tool_exit_code(output: object) -> object:
 
 def observation_summary(output: object, content: str) -> str:
     if isinstance(output, dict):
+        status = output.get("status")
+        if isinstance(status, str):
+            return f"status={status}"
+
         stdout = str(output.get("stdout") or "")
         stderr = str(output.get("stderr") or "")
         if stdout:
@@ -34,4 +39,12 @@ def observation_summary(output: object, content: str) -> str:
             return f"stdout_lines: {len(lines)}\n{preview}"
         if stderr:
             return f"stderr:\n{stderr}"
+    if isinstance(content, str) and content.strip().startswith("{"):
+        try:
+            payload = json.loads(content)
+            status = payload.get("status") if isinstance(payload, dict) else None
+            if isinstance(status, str):
+                return f"status={status}"
+        except json.JSONDecodeError:
+            pass
     return content
