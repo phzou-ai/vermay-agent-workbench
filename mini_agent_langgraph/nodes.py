@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,6 +12,7 @@ from mini_agent.model_clients import ModelClient
 from mini_agent.observation import ObservationHandler
 from mini_agent.permission import PermissionGate
 from mini_agent.progress import ProgressReporter
+from mini_agent.result_summary import observation_summary, tool_command_summary, tool_exit_code
 from mini_agent.tool_executor import ToolExecutor
 from mini_agent.tool_registry import ToolRegistry
 from mini_agent.trace import TraceLogger
@@ -223,15 +223,15 @@ def execute_tool_node(components: GraphComponents):
             "tool_result",
             tool=result.name,
             ok=result.ok,
-            exit_code=_tool_exit_code(result.output),
-            command_summary=_tool_command_summary(result.output),
+            exit_code=tool_exit_code(result.output),
+            command_summary=tool_command_summary(result.output),
         )
         _emit_stream_event(
             "tool_result",
             step=state["step"],
             tool=result.name,
             ok=result.ok,
-            exit_code=_tool_exit_code(result.output),
+            exit_code=tool_exit_code(result.output),
         )
         return {"tool_result": result}
 
@@ -258,7 +258,7 @@ def handle_observation_node(components: GraphComponents):
             "observation",
             tool=observation.tool_name,
             ok=observation.ok,
-            summary=_observation_summary(tool_result.output, observation.content),
+            summary=observation_summary(tool_result.output, observation.content),
         )
         _emit_stream_event(
             "observation",
@@ -270,41 +270,6 @@ def handle_observation_node(components: GraphComponents):
         return {"observation": observation, "observations": observations}
 
     return node
-
-
-def _tool_command_summary(output: object) -> str | None:
-    if isinstance(output, dict) and "command" in output:
-        command = str(output["command"])
-        matches = re.findall(
-            r"(?:/snap/bin/microk8s\s+kubectl|microk8s\s+kubectl|kubectl)\s+(?:get|describe)\s+[^;]+",
-            command,
-        )
-        if matches:
-            return matches[0].strip()
-        return command
-    return None
-
-
-def _tool_exit_code(output: object) -> object:
-    if isinstance(output, dict) and "exit_code" in output:
-        return output["exit_code"]
-    return None
-
-
-def _observation_summary(output: object, content: str) -> str:
-    if isinstance(output, dict):
-        stdout = str(output.get("stdout") or "")
-        stderr = str(output.get("stderr") or "")
-        if stdout:
-            lines = stdout.splitlines()
-            preview = "\n".join(lines[:8])
-            if len(lines) > 8:
-                preview += f"\n... ({len(lines) - 8} more lines in JSONL trace)"
-            return f"stdout_lines: {len(lines)}\n{preview}"
-        if stderr:
-            return f"stderr:\n{stderr}"
-    return content
-
 
 def increment_step_node(_: GraphComponents):
     def node(state: AgentState) -> dict:

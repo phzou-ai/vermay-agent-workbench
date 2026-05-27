@@ -88,6 +88,12 @@ mini-agent --thread-id approval-session --resume-approval false --approval-reaso
 mini-agent --thread-id approval-session --resume-approval true --approval-reason "approved"
 ```
 
+Interactive approval in the same terminal process:
+
+```bash
+mini-agent "apply deployment fix" --interactive-approval
+```
+
 Checkpoint data is stored locally:
 
 ```text

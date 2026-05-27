@@ -19,6 +19,7 @@
 - `routing.py`: conditional edge routing functions.
 - `state.py`: graph state shape.
 - `streaming.py`: summarized graph stream reporting.
+- `toolnode_adapter.py`: adapters between project tool types and LangChain/LangGraph tool message types; not part of the active runtime path yet.
 - `adapters.py`: payload conversion helpers for trace and progress output.
 
 ## Shared Harness Components
@@ -30,6 +31,7 @@
 - `tool_executor.py`: executes tool calls and normalizes failures into `ToolResult`.
 - `permission.py`: blocks dangerous tools before execution.
 - `observation.py`: converts tool results into model-readable observations.
+- `result_summary.py`: shared summary helpers for terminal progress output.
 - `trace.py`: writes JSONL runtime events.
 - `progress.py`: renders human-readable terminal progress.
 - `memory.py`: minimal file-backed memory placeholder.
@@ -63,4 +65,3 @@
 - Builds strict SSH commands from environment configuration.
 - Enforces host key checking and known hosts usage.
 - Redacts identity file path in returned command traces.
-

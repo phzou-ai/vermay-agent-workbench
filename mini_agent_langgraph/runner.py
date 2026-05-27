@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 from uuid import uuid4
 
 from langgraph.checkpoint.memory import InMemorySaver
@@ -45,6 +45,7 @@ class LangGraphAgentRuntime:
     checkpoint_path: Path | None = None
     thread_id: str | None = None
     _checkpoint_conn: sqlite3.Connection | None = field(default=None, init=False, repr=False)
+    _last_interrupt_message: str | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.progress = self.progress or ProgressReporter(enabled=False)
@@ -90,6 +91,7 @@ class LangGraphAgentRuntime:
 
         self.trace.log_event("langgraph_run_started", {"user_input": user_input})
         self.progress.event(None, "run_started", input=user_input, max_steps=self.max_steps)
+        self._last_interrupt_message = None
 
         initial_state = self._initial_state(user_input)
         thread_id = self.thread_id or str(uuid4())
@@ -108,6 +110,33 @@ class LangGraphAgentRuntime:
         message = f"Stopped after max_steps={self.max_steps}"
         self.trace.log_event("langgraph_max_steps_reached", {"message": message})
         return message
+
+    def run_with_interactive_approval(
+        self,
+        user_input: str,
+        approval_provider: Callable[[str, str], tuple[bool, str | None]],
+        skills: list[str] | None = None,
+        stream_modes: Sequence[str] | None = None,
+        max_approval_rounds: int = 3,
+    ) -> str:
+        answer = self.run(user_input, skills=skills, stream_modes=stream_modes)
+        approval_rounds = 0
+
+        while self._last_interrupt_message is not None:
+            approval_rounds += 1
+            if approval_rounds > max_approval_rounds:
+                message = f"Stopped after {max_approval_rounds} approval rounds."
+                self.trace.log_event("langgraph_approval_round_limit_reached", {"message": message})
+                return message
+
+            thread_id = self.thread_id
+            if not thread_id:
+                raise ValueError("thread_id is required for interactive approval")
+
+            approved, reason = approval_provider(self._last_interrupt_message, thread_id)
+            answer = self.resume_approval(approved=approved, thread_id=thread_id, reason=reason)
+
+        return answer
 
     def _initial_state(self, user_input: str) -> AgentState:
         return {
@@ -157,6 +186,7 @@ class LangGraphAgentRuntime:
             raise ValueError("thread_id is required to resume an approval interrupt")
 
         self.thread_id = active_thread_id
+        self._last_interrupt_message = None
         self.trace.log_event(
             "langgraph_resume_approval_requested",
             {"thread_id": active_thread_id, "approved": approved, "reason": reason},
@@ -185,6 +215,7 @@ class LangGraphAgentRuntime:
     def _interrupt_message(self, state: dict, thread_id: str) -> str | None:
         interrupts = state.get("__interrupt__")
         if not interrupts:
+            self._last_interrupt_message = None
             return None
 
         interrupt_value = getattr(interrupts[0], "value", interrupts[0])
@@ -196,9 +227,10 @@ class LangGraphAgentRuntime:
             "langgraph_run_interrupted",
             {"thread_id": thread_id, "interrupt": interrupt_value},
         )
-        return (
+        self._last_interrupt_message = (
             f"{message}\n"
             f"thread_id: {thread_id}\n"
             "Resume with: mini-agent --thread-id "
             f"{thread_id} --resume-approval true"
         )
+        return self._last_interrupt_message

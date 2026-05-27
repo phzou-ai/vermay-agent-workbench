@@ -158,6 +158,47 @@ def test_langgraph_runtime_resumes_approval_with_execution(tmp_path: Path):
     assert '"executed": true' in model.calls[1][-1].content
 
 
+def test_langgraph_runtime_interactive_approval_rejection(tmp_path: Path):
+    model = FakeModel(
+        [
+            ModelResponse(content="Calling tool dangerous.", tool_call=ToolCall(name="dangerous")),
+        ]
+    )
+    runtime = build_test_runtime(tmp_path, model)
+    prompts: list[tuple[str, str]] = []
+
+    def reject(message: str, thread_id: str) -> tuple[bool, str]:
+        prompts.append((message, thread_id))
+        return False, "not allowed interactively"
+
+    answer = runtime.run_with_interactive_approval("run dangerous action", reject)
+
+    assert answer == "Tool call rejected by approval: not allowed interactively"
+    assert len(prompts) == 1
+    assert prompts[0][0].startswith("Approval required for tool 'dangerous'")
+    assert prompts[0][1] == runtime.thread_id
+    assert len(model.calls) == 1
+
+
+def test_langgraph_runtime_interactive_approval_execution(tmp_path: Path):
+    model = FakeModel(
+        [
+            ModelResponse(content="Calling tool dangerous.", tool_call=ToolCall(name="dangerous")),
+            ModelResponse(content="dangerous completed"),
+        ]
+    )
+    runtime = build_test_runtime(tmp_path, model)
+
+    answer = runtime.run_with_interactive_approval(
+        "run dangerous action",
+        lambda message, thread_id: (True, "approved interactively"),
+    )
+
+    assert answer == "dangerous completed"
+    assert len(model.calls) == 2
+    assert '"executed": true' in model.calls[1][-1].content
+
+
 def test_langgraph_runtime_resumes_approval_from_sqlite_checkpoint(tmp_path: Path):
     checkpoint_path = tmp_path / "checkpoints.sqlite"
     first_model = FakeModel(

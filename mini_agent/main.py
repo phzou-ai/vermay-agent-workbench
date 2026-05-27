@@ -111,6 +111,11 @@ def main() -> None:
     )
     parser.add_argument("--approval-reason", default=None, help="Optional reason for approval resume")
     parser.add_argument(
+        "--interactive-approval",
+        action="store_true",
+        help="Prompt for yes/no approval in the same terminal when a LangGraph interrupt occurs",
+    )
+    parser.add_argument(
         "--graph-stream",
         action="store_true",
         help="Show concise LangGraph stream events in addition to harness progress logs",
@@ -133,6 +138,10 @@ def main() -> None:
     use_graph_stream = args.graph_stream or args.graph_stream_mode is not None
     if use_graph_stream and args.runtime != "langgraph":
         raise SystemExit("--graph-stream is only supported with --runtime langgraph")
+    if args.interactive_approval and args.runtime != "langgraph":
+        raise SystemExit("--interactive-approval is only supported with --runtime langgraph")
+    if args.interactive_approval and args.resume_approval is not None:
+        raise SystemExit("--interactive-approval cannot be combined with --resume-approval")
 
     build = build_langgraph_runtime if args.runtime == "langgraph" else build_runtime
     runtime = build(
@@ -157,12 +166,31 @@ def main() -> None:
         print(runtime.resume_approval(approved=approved, thread_id=args.thread_id, reason=args.approval_reason))
         return
 
+    if args.interactive_approval:
+        stream_modes = parse_stream_modes(args.graph_stream_mode) if use_graph_stream else None
+        print(runtime.run_with_interactive_approval(user_input, _prompt_for_approval, stream_modes=stream_modes))
+        return
+
     if use_graph_stream:
         stream_modes = parse_stream_modes(args.graph_stream_mode)
         print(runtime.run(user_input, stream_modes=stream_modes))
         return
 
     print(runtime.run(user_input))
+
+
+def _prompt_for_approval(message: str, thread_id: str) -> tuple[bool, str | None]:
+    print(message)
+    while True:
+        try:
+            value = input(f"Approve tool execution for thread {thread_id}? [yes/no]: ").strip().lower()
+        except EOFError:
+            return False, "approval input unavailable"
+        if value in {"y", "yes"}:
+            return True, "approved interactively"
+        if value in {"n", "no"}:
+            return False, "rejected interactively"
+        print("Please enter yes or no.")
 
 
 if __name__ == "__main__":

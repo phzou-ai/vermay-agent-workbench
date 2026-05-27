@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import re
-
 from .context_builder import ContextBuilder
 from .memory import MemoryStore
 from .model_clients import ModelClient
 from .observation import ObservationHandler
 from .permission import PermissionGate
 from .progress import ProgressReporter
+from .result_summary import observation_summary, tool_command_summary, tool_exit_code
 from .tool_executor import ToolExecutor
 from .tool_registry import ToolRegistry
 from .trace import TraceLogger
@@ -126,15 +125,15 @@ class MiniAgentRuntime:
                 "tool_result",
                 tool=result.name,
                 ok=result.ok,
-                exit_code=self._tool_exit_code(result.output),
-                command_summary=self._tool_command_summary(result.output),
+                exit_code=tool_exit_code(result.output),
+                command_summary=tool_command_summary(result.output),
             )
             self.progress.event(
                 step,
                 "observation",
                 tool=observation.tool_name,
                 ok=observation.ok,
-                summary=self._observation_summary(result.output, observation.content),
+                summary=observation_summary(result.output, observation.content),
             )
             self.trace.log_event(
                 "tool_result",
@@ -150,34 +149,3 @@ class MiniAgentRuntime:
         self.trace.log_event("max_steps_reached", {"message": message})
         self.progress.event(None, "max_steps_reached", max_steps=self.max_steps)
         return message
-
-    def _tool_command_summary(self, output: object) -> str | None:
-        if isinstance(output, dict) and "command" in output:
-            command = str(output["command"])
-            matches = re.findall(
-                r"(?:/snap/bin/microk8s\s+kubectl|microk8s\s+kubectl|kubectl)\s+(?:get|describe)\s+[^;]+",
-                command,
-            )
-            if matches:
-                return matches[0].strip()
-            return command
-        return None
-
-    def _tool_exit_code(self, output: object) -> object:
-        if isinstance(output, dict) and "exit_code" in output:
-            return output["exit_code"]
-        return None
-
-    def _observation_summary(self, output: object, content: str) -> str:
-        if isinstance(output, dict):
-            stdout = str(output.get("stdout") or "")
-            stderr = str(output.get("stderr") or "")
-            if stdout:
-                lines = stdout.splitlines()
-                preview = "\n".join(lines[:8])
-                if len(lines) > 8:
-                    preview += f"\n... ({len(lines) - 8} more lines in JSONL trace)"
-                return f"stdout_lines: {len(lines)}\n{preview}"
-            if stderr:
-                return f"stderr:\n{stderr}"
-        return content
