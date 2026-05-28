@@ -14,6 +14,7 @@
 `mini_agent/langgraph_runtime/`
 
 - `runner.py`: CLI-facing runtime wrapper around the compiled graph.
+- `results.py`: structured runtime result type used by graph execution wrappers.
 - `graph.py`: LangGraph node and edge topology.
 - `nodes.py`: graph node implementations that call the shared harness components.
 - `routing.py`: conditional edge routing functions.

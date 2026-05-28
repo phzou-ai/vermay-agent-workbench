@@ -81,6 +81,20 @@ def test_langgraph_runtime_runs_safe_tool_then_final_answer(tmp_path: Path):
     assert '"value": "hello"' in model.calls[1][-1].content
 
 
+def test_langgraph_runtime_start_returns_run_result_for_final_answer(tmp_path: Path):
+    model = FakeModel([ModelResponse(content="final answer")])
+    runtime = build_test_runtime(tmp_path, model)
+
+    result = runtime.start("say hello")
+
+    assert result.thread_id == runtime.thread_id
+    assert result.final_answer == "final answer"
+    assert result.interrupt is None
+    assert result.interrupt_message is None
+    assert result.stop_message is None
+    assert result.to_output() == "final answer"
+
+
 def test_langgraph_runtime_streams_safe_tool_then_final_answer(tmp_path: Path):
     model = FakeModel(
         [
@@ -110,6 +124,26 @@ def test_langgraph_runtime_streams_approval_interrupt(tmp_path: Path):
     assert "thread_id:" in answer
 
 
+def test_langgraph_runtime_start_returns_run_result_for_approval_interrupt(tmp_path: Path):
+    model = FakeModel(
+        [
+            ModelResponse(content="Calling tool dangerous.", tool_call=ToolCall(name="dangerous")),
+        ]
+    )
+    runtime = build_test_runtime(tmp_path, model)
+
+    result = runtime.start("run dangerous action")
+
+    assert result.thread_id == runtime.thread_id
+    assert result.final_answer is None
+    assert result.interrupt is not None
+    assert isinstance(result.interrupt, dict)
+    assert result.interrupt["tool_call"]["name"] == "dangerous"
+    assert result.interrupt_message is not None
+    assert result.interrupt_message.startswith("Approval required for tool 'dangerous'")
+    assert result.to_output() == result.interrupt_message
+
+
 def test_langgraph_runtime_stops_for_dangerous_tool_approval(tmp_path: Path):
     model = FakeModel(
         [
@@ -124,6 +158,25 @@ def test_langgraph_runtime_stops_for_dangerous_tool_approval(tmp_path: Path):
     assert "thread_id:" in answer
     assert "--resume-approval true" in answer
     assert len(model.calls) == 1
+
+
+def test_langgraph_runtime_resume_returns_run_result(tmp_path: Path):
+    model = FakeModel(
+        [
+            ModelResponse(content="Calling tool dangerous.", tool_call=ToolCall(name="dangerous")),
+            ModelResponse(content="dangerous completed"),
+        ]
+    )
+    runtime = build_test_runtime(tmp_path, model)
+
+    runtime.start("run dangerous action")
+    result = runtime.resume(approved=True, reason="approved for test")
+
+    assert result.thread_id == runtime.thread_id
+    assert result.final_answer == "dangerous completed"
+    assert result.interrupt is None
+    assert result.interrupt_message is None
+    assert result.to_output() == "dangerous completed"
 
 
 def test_langgraph_runtime_resumes_approval_with_rejection(tmp_path: Path):
