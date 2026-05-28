@@ -6,9 +6,9 @@ This document describes the current approval interrupt and resume flow in the La
 
 The implementation is centered on:
 
-- `mini_agent_langgraph/runner.py`
-- `mini_agent_langgraph/nodes.py`
-- `mini_agent_langgraph/graph.py`
+- `mini_agent/langgraph_runtime/runner.py`
+- `mini_agent/langgraph_runtime/nodes.py`
+- `mini_agent/langgraph_runtime/graph.py`
 
 ## Runtime Entry
 

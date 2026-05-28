@@ -13,4 +13,4 @@ dependencies = ["rich>=13.7", "pytest>=8.0", "langgraph>=1.0", "langgraph-checkp
 mini-agent = "mini_agent.main:main"
 
 [tool.setuptools.packages.find]
-include = ["mini_agent*", "mini_agent_langgraph*"]
+include = ["mini_agent*"]

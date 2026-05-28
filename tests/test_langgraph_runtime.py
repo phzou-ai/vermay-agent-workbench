@@ -10,9 +10,9 @@ from mini_agent.tool_executor import ToolExecutor
 from mini_agent.tool_registry import ToolRegistry
 from mini_agent.trace import TraceLogger
 from mini_agent.types import Message, ModelResponse, ToolCall, ToolSpec
-from mini_agent_langgraph import LangGraphAgentRuntime
-from mini_agent_langgraph.routing import route_after_approval, route_after_model, route_after_permission, route_after_step
-from mini_agent_langgraph.streaming import parse_stream_modes, summarize_stream_chunk
+from mini_agent.langgraph_runtime import LangGraphAgentRuntime
+from mini_agent.langgraph_runtime.routing import route_after_approval, route_after_model, route_after_permission, route_after_step
+from mini_agent.langgraph_runtime.streaming import parse_stream_modes, summarize_stream_chunk
 
 
 class FakeModel:

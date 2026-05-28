@@ -172,7 +172,7 @@ mini_agent/
   tools/
   infra/
 
-mini_agent_langgraph/
+mini_agent/langgraph_runtime/
   state.py
   graph.py
   nodes.py

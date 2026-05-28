@@ -17,7 +17,7 @@ This document records the current comparison result and the decision boundary fo
 
 ## Current Custom Execution Path
 
-The active graph uses `execute_tool_node` in `mini_agent_langgraph/nodes.py`.
+The active graph uses `execute_tool_node` in `mini_agent/langgraph_runtime/nodes.py`.
 
 Execution path:
 
@@ -44,7 +44,7 @@ Properties:
 The isolated adapter evaluation lives in:
 
 ```text
-mini_agent_langgraph/toolnode_adapter.py
+mini_agent/langgraph_runtime/toolnode_adapter.py
 tests/test_toolnode_adapter.py
 ```
 

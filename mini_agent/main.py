@@ -4,8 +4,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from mini_agent_langgraph import LangGraphAgentRuntime
-from mini_agent_langgraph.streaming import GraphStreamReporter, parse_stream_modes
+from mini_agent.langgraph_runtime import LangGraphAgentRuntime
+from mini_agent.langgraph_runtime.streaming import GraphStreamReporter, parse_stream_modes
 
 from .context_builder import ContextBuilder
 from .memory import MemoryStore

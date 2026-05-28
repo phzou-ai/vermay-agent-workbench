@@ -20,7 +20,7 @@ The main issue is not correctness. The main issue is that several files now carr
 
 ## High-Priority Organization Issues
 
-### 1. `mini_agent_langgraph/nodes.py` Is Too Broad
+### 1. `mini_agent/langgraph_runtime/nodes.py` Is Too Broad
 
 Current responsibilities:
 
@@ -46,7 +46,7 @@ Risk:
 Recommended next cleanup:
 
 ```text
-mini_agent_langgraph/
+mini_agent/langgraph_runtime/
   components.py
   nodes/
     context.py
@@ -82,7 +82,7 @@ Risk:
 Recommended next cleanup:
 
 ```text
-mini_agent_langgraph/
+mini_agent/langgraph_runtime/
   runner.py
   checkpointing.py
   invocation.py
@@ -192,7 +192,7 @@ Introduce test fixtures only if duplication starts blocking changes. Current dup
 The adapter module is acceptable:
 
 ```text
-mini_agent_langgraph/toolnode_adapter.py
+mini_agent/langgraph_runtime/toolnode_adapter.py
 ```
 
 It is not on the active runtime path. It records the shape conversion needed if the project later adopts LangChain message-native tool execution.

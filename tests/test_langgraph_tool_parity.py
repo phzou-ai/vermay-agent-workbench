@@ -14,7 +14,7 @@ from mini_agent.tools.weather import register_weather_tools
 from mini_agent.tools.weather import forecast as weather_module
 from mini_agent.trace import TraceLogger
 from mini_agent.types import Message, ModelResponse, ToolCall
-from mini_agent_langgraph import LangGraphAgentRuntime
+from mini_agent.langgraph_runtime import LangGraphAgentRuntime
 
 
 class FakeModel:

@@ -18,7 +18,7 @@ The current implementation focuses on:
 
 ## Current Runtime Position
 
-The default CLI runtime is the LangGraph implementation in `mini_agent_langgraph/`.
+The default CLI runtime is the LangGraph implementation in `mini_agent/langgraph_runtime/`.
 
 The handwritten runtime in `mini_agent/runtime.py` remains in the repository as a compact reference implementation and compatibility path. New orchestration work should target the LangGraph runtime first.
 

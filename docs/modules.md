@@ -11,7 +11,7 @@
 
 ## LangGraph Runtime
 
-`mini_agent_langgraph/`
+`mini_agent/langgraph_runtime/`
 
 - `runner.py`: CLI-facing runtime wrapper around the compiled graph.
 - `graph.py`: LangGraph node and edge topology.
