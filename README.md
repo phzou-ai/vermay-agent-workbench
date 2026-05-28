@@ -1,19 +1,45 @@
 # Mini Agent Workbench
 
-Mini Agent Workbench is a Python project for validating and practicing agent runtime patterns in concrete command-line workflows.
+Mini Agent Workbench is an out-of-the-box Python workbench for building and validating an agent harness.
 
-The runtime is built on LangGraph. The project keeps the core harness boundaries explicit so agent behavior can be inspected, tested, and extended without hiding tool execution, permission checks, or observations inside a single opaque node.
+The runtime is built on LangGraph, while the harness boundaries remain explicit: context construction, model calls, tool registration, permission checks, tool execution, observations, progress output, and JSONL traces are implemented as visible project modules instead of being hidden inside one opaque node.
 
-Current focus:
+The project is intended to provide a concrete, runnable baseline for agent harness engineering:
 
-- LangGraph orchestration.
+- LangGraph runtime orchestration.
 - Tool calling through an explicit registry and executor.
 - Permission control before dangerous operations.
 - Approval interrupt and resume.
-- SSH-backed read-only Kubernetes inspection.
-- External read-only data tools.
+- Model adapter boundary.
 - Human-readable progress output.
 - JSONL audit traces.
+
+## Harness Boundary
+
+In this project, harness means the engineering layer around the model that turns model intent into controlled execution.
+
+The model may produce an action such as:
+
+```json
+{"action":"tool_call","name":"weather_forecast","arguments":{"location":"Shanghai"}}
+```
+
+The harness is responsible for:
+
+```text
+build context
+  -> call model
+  -> parse model action
+  -> check permission
+  -> execute tool
+  -> convert result to observation
+  -> record progress and trace
+  -> continue or finish
+```
+
+Core harness modules include `context_builder.py`, `tool_registry.py`, `tool_executor.py`, `permission.py`, `observation.py`, `trace.py`, `progress.py`, and `types.py`.
+
+`mini_agent/langgraph_runtime/` is the orchestration layer that wires those harness components into a LangGraph state machine.
 
 ## Install
 
@@ -28,21 +54,16 @@ python -m pip install -e .
 ## Run
 
 ```bash
-mini-agent "check cluster status"
-mini-agent "check real cluster pods"
-mini-agent "grep nginx errors"
 mini-agent "weather forecast for Shanghai"
 ```
 
-The CLI uses the LangGraph runtime:
+The CLI uses the LangGraph runtime in `mini_agent/langgraph_runtime/`.
 
-```bash
-mini-agent "grep nginx errors"
-```
+## Model Client
 
-## Ollama Configuration
+The runtime calls models through a `ModelClient` boundary. This keeps provider-specific request formats, authentication, timeouts, and response parsing outside the harness orchestration.
 
-Default model configuration is read from `.env`, then overridden by `.env.local`, `.env.dev.local`, shell environment variables, and finally CLI flags.
+The current implementation includes an Ollama-compatible client in `mini_agent/model_clients/ollama.py`. Its default configuration is read from `.env`, then overridden by `.env.local`, `.env.dev.local`, shell environment variables, and finally CLI flags.
 
 ```bash
 MINI_AGENT_OLLAMA_MODEL=deepseek-v4-flash:cloud
@@ -50,16 +71,18 @@ MINI_AGENT_OLLAMA_BASE_URL=http://127.0.0.1:11434
 MINI_AGENT_OLLAMA_TIMEOUT_SECONDS=120
 ```
 
-Example CLI override:
+CLI override example:
 
 ```bash
-mini-agent "grep nginx errors" \
+mini-agent "weather forecast for Shanghai" \
   --ollama-model qwen3.6:27b \
   --ollama-base-url http://127.0.0.1:11434 \
   --ollama-timeout-seconds 120
 ```
 
-The Ollama adapter uses `/api/chat` and expects a JSON action protocol:
+Additional providers can be added by implementing the same model client protocol and returning the project `ModelResponse` type.
+
+The active adapter expects a JSON action protocol:
 
 ```json
 {"action":"final","content":"..."}
@@ -69,116 +92,6 @@ or:
 
 ```json
 {"action":"tool_call","name":"tool_name","arguments":{}}
-```
-
-## SSH Kubernetes Configuration
-
-Real cluster inspection is available through allowlisted read-only SSH Kubernetes tools.
-
-Local configuration should be placed in `.env.local` or exported in the shell:
-
-```bash
-MINI_AGENT_SSH_TARGET=user@example-host
-MINI_AGENT_SSH_PORT=22
-MINI_AGENT_SSH_IDENTITY_FILE=~/.ssh/example_ed25519
-MINI_AGENT_SSH_KNOWN_HOSTS_FILE=~/.ssh/known_hosts
-```
-
-The SSH client always uses:
-
-```text
-StrictHostKeyChecking=yes
-UpdateHostKeys=yes
-```
-
-Supported read-only tools:
-
-- `ssh_kubectl_get`
-- `ssh_kubectl_describe`
-
-Supported operations:
-
-- `kubectl get pods|services|deployments|nodes|namespaces|events`
-- `kubectl describe pod|service|deployment|node`
-
-## Approval Resume
-
-Dangerous tools are interrupted before execution and require approval.
-
-In an interactive terminal, the default command prompts for approval in the same process:
-
-```bash
-mini-agent "apply deployment fix" --thread-id approval-session
-```
-
-In non-interactive environments, the command returns a manual resume instruction. Manual resume remains available:
-
-```bash
-mini-agent --thread-id approval-session --resume-approval false --approval-reason "not allowed"
-mini-agent --thread-id approval-session --resume-approval true --approval-reason "approved"
-```
-
-Interactive approval asks at most once per run by default. If the model requests another dangerous tool after approval, the run stops instead of repeatedly prompting.
-
-The default progress output is an indented agent transcript written to stderr.
-
-Checkpoint data is stored locally in:
-
-```text
-traces/langgraph_checkpoints.sqlite
-```
-
-## Observability
-
-Progress output is written to stderr by default.
-
-```bash
-mini-agent "check real cluster pods" --no-progress
-```
-
-LangGraph stream inspection is optional:
-
-```bash
-mini-agent "grep nginx errors" --graph-stream
-mini-agent "grep nginx errors" --graph-stream-mode updates,custom,debug
-mini-agent "grep nginx errors" --graph-stream-mode updates --graph-stream-mode values --no-progress
-```
-
-JSONL traces are written to:
-
-```text
-traces/*.jsonl
-```
-
-## Project Structure
-
-```text
-mini_agent/
-  main.py
-  context_builder.py
-  tool_registry.py
-  tool_executor.py
-  permission.py
-  observation.py
-  progress.py
-  trace.py
-  model_clients/
-  tools/
-  infra/
-
-mini_agent/langgraph_runtime/
-  state.py
-  graph.py
-  nodes.py
-  routing.py
-  runner.py
-  streaming.py
-
-docs/
-  README.md
-  overview.md
-  modules.md
-  operations.md
 ```
 
 ## Documentation
