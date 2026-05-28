@@ -20,7 +20,7 @@ Default execution path:
 mini-agent "<prompt>"
   -> main()
   -> build_langgraph_runtime()
-  -> TTY: LangGraphAgentRuntime.run_with_interactive_approval()
+  -> TTY: CLI run_with_interactive_approval(...)
   -> non-TTY: LangGraphAgentRuntime.run()
 ```
 
@@ -29,13 +29,13 @@ Manual approval resume path:
 ```text
 mini-agent --thread-id <id> --resume-approval true
   -> main()
-  -> build_langgraph_runtime(thread_id=<id>)
-  -> LangGraphAgentRuntime.resume_approval()
+  -> build_langgraph_runtime()
+  -> LangGraphAgentRuntime.resume_approval(thread_id=<id>)
 ```
 
 ## Initial Run
 
-`LangGraphAgentRuntime.run()` creates a fresh graph state:
+`LangGraphAgentRuntime.run()` creates a fresh graph state and delegates to `start()`:
 
 ```text
 user_input
@@ -52,7 +52,7 @@ max_steps=<configured max_steps>
 errors=[]
 ```
 
-It then assigns a `thread_id`:
+`start()` then assigns a `thread_id`:
 
 ```text
 provided thread_id
@@ -218,17 +218,17 @@ Interactive approval is the default CLI behavior when stdin is attached to a ter
 Flow:
 
 ```text
-run_with_interactive_approval()
-  -> run()
-     -> graph.invoke(...)
-     -> normal final answer or interrupt
+CLI run_with_interactive_approval(...)
+  -> runtime.start()
+     -> graph.invoke(...) or graph.stream(...)
+     -> RunResult with final answer or interrupt
   -> if interrupt exists:
        approval_provider(message, thread_id)
-       resume_approval(approved, thread_id, reason)
+       runtime.resume(thread_id, approved, reason)
   -> return final answer
 ```
 
-`run_with_interactive_approval()` does not repeat an already-completed graph run. It starts the graph once through `start()`. It only resumes when the returned `RunResult` contains an interrupt message.
+The CLI helper does not repeat an already-completed graph run. It starts the graph once through `start()`. It only resumes when the returned `RunResult` contains an interrupt message.
 
 Current safety limit:
 

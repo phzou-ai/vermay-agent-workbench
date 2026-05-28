@@ -11,8 +11,10 @@ from mini_agent.tool_registry import ToolRegistry
 from mini_agent.trace import TraceLogger
 from mini_agent.types import Message, ModelResponse, ToolCall, ToolSpec
 from mini_agent.langgraph_runtime import LangGraphAgentRuntime
+from mini_agent.langgraph_runtime.results import RunResult
 from mini_agent.langgraph_runtime.routing import route_after_approval, route_after_model, route_after_permission, route_after_step
 from mini_agent.langgraph_runtime.streaming import parse_stream_modes, summarize_stream_chunk
+from mini_agent.main import run_with_interactive_approval
 
 
 class FakeModel:
@@ -87,12 +89,21 @@ def test_langgraph_runtime_start_returns_run_result_for_final_answer(tmp_path: P
 
     result = runtime.start("say hello")
 
-    assert result.thread_id == runtime.thread_id
+    assert result.thread_id
     assert result.final_answer == "final answer"
     assert result.interrupt is None
     assert result.interrupt_message is None
     assert result.stop_message is None
     assert result.to_output() == "final answer"
+    assert result.status == "completed"
+    assert result.to_dict() == {
+        "thread_id": result.thread_id,
+        "status": "completed",
+        "final_answer": "final answer",
+        "interrupt": None,
+        "interrupt_message": None,
+        "stop_message": None,
+    }
 
 
 def test_langgraph_runtime_streams_safe_tool_then_final_answer(tmp_path: Path):
@@ -134,7 +145,7 @@ def test_langgraph_runtime_start_returns_run_result_for_approval_interrupt(tmp_p
 
     result = runtime.start("run dangerous action")
 
-    assert result.thread_id == runtime.thread_id
+    assert result.thread_id
     assert result.final_answer is None
     assert result.interrupt is not None
     assert isinstance(result.interrupt, dict)
@@ -142,7 +153,12 @@ def test_langgraph_runtime_start_returns_run_result_for_approval_interrupt(tmp_p
     assert result.interrupt_message is not None
     assert result.interrupt_message.startswith("Approval required for tool 'dangerous'")
     assert result.to_output() == result.interrupt_message
+    payload = result.to_dict()
+    assert payload["status"] == "interrupted"
+    assert payload["interrupt"]["tool_call"]["name"] == "dangerous"
+    assert payload["interrupt_message"] == result.interrupt_message
     assert not hasattr(runtime, "_pending_interrupt_message")
+    assert not hasattr(runtime, "thread_id")
 
 
 def test_langgraph_runtime_stops_for_dangerous_tool_approval(tmp_path: Path):
@@ -170,14 +186,26 @@ def test_langgraph_runtime_resume_returns_run_result(tmp_path: Path):
     )
     runtime = build_test_runtime(tmp_path, model)
 
-    runtime.start("run dangerous action")
-    result = runtime.resume(approved=True, reason="approved for test")
+    interrupted = runtime.start("run dangerous action")
+    result = runtime.resume(thread_id=interrupted.thread_id, approved=True, reason="approved for test")
 
-    assert result.thread_id == runtime.thread_id
+    assert result.thread_id == interrupted.thread_id
     assert result.final_answer == "dangerous completed"
     assert result.interrupt is None
     assert result.interrupt_message is None
     assert result.to_output() == "dangerous completed"
+
+
+def test_langgraph_runtime_requires_thread_id_for_resume(tmp_path: Path):
+    model = FakeModel([])
+    runtime = build_test_runtime(tmp_path, model)
+
+    try:
+        runtime.resume(thread_id="", approved=True)
+    except ValueError as error:
+        assert str(error) == "thread_id is required to resume an approval interrupt"
+    else:
+        raise AssertionError("resume should require an explicit thread_id")
 
 
 def test_langgraph_runtime_resumes_approval_with_rejection(tmp_path: Path):
@@ -188,8 +216,8 @@ def test_langgraph_runtime_resumes_approval_with_rejection(tmp_path: Path):
     )
     runtime = build_test_runtime(tmp_path, model)
 
-    runtime.run("run dangerous action")
-    answer = runtime.resume_approval(approved=False, reason="not allowed")
+    interrupted = runtime.start("run dangerous action")
+    answer = runtime.resume_approval(thread_id=interrupted.thread_id, approved=False, reason="not allowed")
 
     assert answer == "Tool call rejected by approval: not allowed"
     assert len(model.calls) == 1
@@ -204,15 +232,15 @@ def test_langgraph_runtime_resumes_approval_with_execution(tmp_path: Path):
     )
     runtime = build_test_runtime(tmp_path, model)
 
-    runtime.run("run dangerous action")
-    answer = runtime.resume_approval(approved=True, reason="approved for test")
+    interrupted = runtime.start("run dangerous action")
+    answer = runtime.resume_approval(thread_id=interrupted.thread_id, approved=True, reason="approved for test")
 
     assert answer == "dangerous completed"
     assert len(model.calls) == 2
     assert '"executed": true' in model.calls[1][-1].content
 
 
-def test_langgraph_runtime_interactive_approval_rejection(tmp_path: Path):
+def test_cli_interactive_approval_rejection(tmp_path: Path):
     model = FakeModel(
         [
             ModelResponse(content="Calling tool dangerous.", tool_call=ToolCall(name="dangerous")),
@@ -225,16 +253,16 @@ def test_langgraph_runtime_interactive_approval_rejection(tmp_path: Path):
         prompts.append((message, thread_id))
         return False, "not allowed interactively"
 
-    answer = runtime.run_with_interactive_approval("run dangerous action", reject)
+    answer = run_with_interactive_approval(runtime, "run dangerous action", reject)
 
     assert answer == "Tool call rejected by approval: not allowed interactively"
     assert len(prompts) == 1
     assert prompts[0][0].startswith("Approval required for tool 'dangerous'")
-    assert prompts[0][1] == runtime.thread_id
+    assert prompts[0][1]
     assert len(model.calls) == 1
 
 
-def test_langgraph_runtime_interactive_approval_execution(tmp_path: Path):
+def test_cli_interactive_approval_execution(tmp_path: Path):
     model = FakeModel(
         [
             ModelResponse(content="Calling tool dangerous.", tool_call=ToolCall(name="dangerous")),
@@ -243,7 +271,8 @@ def test_langgraph_runtime_interactive_approval_execution(tmp_path: Path):
     )
     runtime = build_test_runtime(tmp_path, model)
 
-    answer = runtime.run_with_interactive_approval(
+    answer = run_with_interactive_approval(
+        runtime,
         "run dangerous action",
         lambda message, thread_id: (True, "approved interactively"),
     )
@@ -253,7 +282,34 @@ def test_langgraph_runtime_interactive_approval_execution(tmp_path: Path):
     assert '"executed": true' in model.calls[1][-1].content
 
 
-def test_langgraph_runtime_interactive_approval_stops_after_round_limit(tmp_path: Path):
+def test_cli_interactive_approval_uses_supplied_thread_id(tmp_path: Path):
+    model = FakeModel(
+        [
+            ModelResponse(content="Calling tool dangerous.", tool_call=ToolCall(name="dangerous")),
+            ModelResponse(content="dangerous completed"),
+        ]
+    )
+    runtime = build_test_runtime(tmp_path, model)
+    prompts: list[tuple[str, str]] = []
+
+    def approve(message: str, thread_id: str) -> tuple[bool, str]:
+        prompts.append((message, thread_id))
+        return True, "approved interactively"
+
+    answer = run_with_interactive_approval(
+        runtime,
+        "run dangerous action",
+        approve,
+        thread_id="cli-session",
+    )
+
+    assert answer == "dangerous completed"
+    assert len(prompts) == 1
+    assert prompts[0][1] == "cli-session"
+    assert "thread_id: cli-session" in prompts[0][0]
+
+
+def test_cli_interactive_approval_stops_after_round_limit(tmp_path: Path):
     model = FakeModel(
         [
             ModelResponse(content="Calling tool dangerous.", tool_call=ToolCall(name="dangerous")),
@@ -268,7 +324,7 @@ def test_langgraph_runtime_interactive_approval_stops_after_round_limit(tmp_path
         prompts += 1
         return True, "approved interactively"
 
-    answer = runtime.run_with_interactive_approval("run dangerous action", approve)
+    answer = run_with_interactive_approval(runtime, "run dangerous action", approve)
 
     assert answer == "Stopped after 1 approval rounds."
     assert prompts == 1
@@ -284,20 +340,46 @@ def test_langgraph_runtime_resumes_approval_from_sqlite_checkpoint(tmp_path: Pat
     )
     first_runtime = build_test_runtime(tmp_path, first_model)
     first_runtime.checkpoint_path = checkpoint_path
-    first_runtime.thread_id = "approval-thread"
     first_runtime.__post_init__()
 
-    first_runtime.run("run dangerous action")
+    first_runtime.run("run dangerous action", thread_id="approval-thread")
 
     second_model = FakeModel([ModelResponse(content="resumed final")])
     second_runtime = build_test_runtime(tmp_path, second_model)
     second_runtime.checkpoint_path = checkpoint_path
     second_runtime.__post_init__()
 
-    answer = second_runtime.resume_approval(approved=True, thread_id="approval-thread")
+    answer = second_runtime.resume_approval(thread_id="approval-thread", approved=True)
 
     assert answer == "resumed final"
     assert len(second_model.calls) == 1
+
+
+def test_langgraph_runtime_supports_multiple_explicit_threads_on_one_runtime(tmp_path: Path):
+    model = FakeModel(
+        [
+            ModelResponse(content="Calling tool dangerous.", tool_call=ToolCall(name="dangerous")),
+            ModelResponse(content="Calling tool dangerous.", tool_call=ToolCall(name="dangerous")),
+            ModelResponse(content="session a final"),
+            ModelResponse(content="session b final"),
+        ]
+    )
+    runtime = build_test_runtime(tmp_path, model)
+
+    session_a = runtime.start("run dangerous action for a", thread_id="session-a")
+    session_b = runtime.start("run dangerous action for b", thread_id="session-b")
+    resumed_a = runtime.resume(thread_id=session_a.thread_id, approved=True, reason="approved a")
+    resumed_b = runtime.resume(thread_id=session_b.thread_id, approved=True, reason="approved b")
+
+    assert session_a.thread_id == "session-a"
+    assert session_b.thread_id == "session-b"
+    assert resumed_a.thread_id == "session-a"
+    assert resumed_a.final_answer == "session a final"
+    assert resumed_b.thread_id == "session-b"
+    assert resumed_b.final_answer == "session b final"
+    assert model.calls[2][1].content == "run dangerous action for a"
+    assert model.calls[3][1].content == "run dangerous action for b"
+    assert len(model.calls) == 4
 
 
 def test_langgraph_runtime_enforces_max_steps(tmp_path: Path):
@@ -313,6 +395,25 @@ def test_langgraph_runtime_enforces_max_steps(tmp_path: Path):
 
     assert answer == "Stopped after max_steps=2"
     assert len(model.calls) == 2
+
+
+def test_run_result_to_dict_can_include_safe_state_payload():
+    result = RunResult(
+        thread_id="state-session",
+        stop_message="stopped",
+        state={"tool_call": ToolCall(name="echo", arguments={"value": "hello"})},
+    )
+
+    assert result.status == "stopped"
+    assert result.to_dict(include_state=True) == {
+        "thread_id": "state-session",
+        "status": "stopped",
+        "final_answer": None,
+        "interrupt": None,
+        "interrupt_message": None,
+        "stop_message": "stopped",
+        "state": {"tool_call": {"name": "echo", "arguments": {"value": "hello"}}},
+    }
 
 
 def test_langgraph_routing_after_model():

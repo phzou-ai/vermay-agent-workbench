@@ -8,13 +8,14 @@
 - Builds the LangGraph runtime.
 - Wires model, tools, memory, trace, progress reporting, and checkpoint storage.
 - Handles approval resume CLI options.
+- Owns terminal-only interactive approval prompting.
 
 ## LangGraph Runtime
 
 `mini_agent/langgraph_runtime/`
 
-- `runner.py`: CLI-facing runtime wrapper around the compiled graph.
-- `results.py`: structured runtime result type used by graph execution wrappers.
+- `runner.py`: runtime wrapper around the compiled graph.
+- `results.py`: structured runtime result type and API-facing result payload helpers.
 - `graph.py`: LangGraph node and edge topology.
 - `nodes.py`: graph node implementations that call the shared harness components.
 - `routing.py`: conditional edge routing functions.

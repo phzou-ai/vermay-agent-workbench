@@ -12,8 +12,9 @@ The project is positioned as an agent validation and practice workbench. It is i
 2. [modules.md](modules.md) - key packages and module responsibilities.
 3. [operations.md](operations.md) - CLI usage, runtime options, environment configuration, and traces.
 4. [langgraph-interrupt-resume.md](langgraph-interrupt-resume.md) - approval interrupt, checkpoint, and resume flow.
-5. [toolnode-evaluation.md](toolnode-evaluation.md) - isolated `ToolNode` compatibility evaluation and current decision.
-6. [code-organization-review.md](code-organization-review.md) - current code organization assessment and cleanup order.
+5. [server-api-readiness.md](server-api-readiness.md) - runtime boundary for future server/API integration.
+6. [toolnode-evaluation.md](toolnode-evaluation.md) - isolated `ToolNode` compatibility evaluation and current decision.
+7. [code-organization-review.md](code-organization-review.md) - current code organization assessment and cleanup order.
 
 ## Documentation Boundary
 

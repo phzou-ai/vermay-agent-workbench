@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Callable, Sequence
 
 from mini_agent.langgraph_runtime import LangGraphAgentRuntime
 from mini_agent.langgraph_runtime.streaming import GraphStreamReporter, parse_stream_modes
@@ -30,7 +31,6 @@ def build_langgraph_runtime(
     ollama_timeout_seconds: int | None = None,
     max_steps: int = 5,
     show_progress: bool = True,
-    thread_id: str | None = None,
     show_graph_stream: bool = False,
 ) -> LangGraphAgentRuntime:
     registry = ToolRegistry()
@@ -54,7 +54,6 @@ def build_langgraph_runtime(
         progress=ProgressReporter(enabled=show_progress),
         stream_reporter=GraphStreamReporter(enabled=show_graph_stream),
         checkpoint_path=ROOT / "traces" / "langgraph_checkpoints.sqlite",
-        thread_id=thread_id,
     )
 
 
@@ -103,23 +102,55 @@ def main() -> None:
         ollama_timeout_seconds=args.ollama_timeout_seconds,
         max_steps=args.max_steps,
         show_progress=not args.no_progress,
-        thread_id=args.thread_id,
         show_graph_stream=use_graph_stream,
     )
     if args.resume_approval is not None:
         if not args.thread_id:
             raise SystemExit("--thread-id is required with --resume-approval")
         approved = args.resume_approval == "true"
-        print(runtime.resume_approval(approved=approved, thread_id=args.thread_id, reason=args.approval_reason))
+        print(runtime.resume_approval(thread_id=args.thread_id, approved=approved, reason=args.approval_reason))
         return
 
     stream_modes = parse_stream_modes(args.graph_stream_mode) if use_graph_stream else None
 
     if sys.stdin.isatty():
-        print(runtime.run_with_interactive_approval(user_input, _prompt_for_approval, stream_modes=stream_modes))
+        print(
+            run_with_interactive_approval(
+                runtime,
+                user_input,
+                _prompt_for_approval,
+                stream_modes=stream_modes,
+                thread_id=args.thread_id,
+            )
+        )
         return
 
-    print(runtime.run(user_input, stream_modes=stream_modes))
+    print(runtime.run(user_input, stream_modes=stream_modes, thread_id=args.thread_id))
+
+
+def run_with_interactive_approval(
+    runtime: LangGraphAgentRuntime,
+    user_input: str,
+    approval_provider: Callable[[str, str], tuple[bool, str | None]],
+    skills: list[str] | None = None,
+    stream_modes: Sequence[str] | None = None,
+    max_approval_rounds: int = 1,
+    thread_id: str | None = None,
+) -> str:
+    result = runtime.start(user_input, skills=skills, stream_modes=stream_modes, thread_id=thread_id)
+    approval_rounds = 0
+
+    while result.interrupt_message is not None:
+        approval_rounds += 1
+        if approval_rounds > max_approval_rounds:
+            message = f"Stopped after {max_approval_rounds} approval rounds."
+            runtime.trace.log_event("langgraph_approval_round_limit_reached", {"message": message})
+            return message
+
+        approved, reason = approval_provider(result.interrupt_message, result.thread_id)
+        result = runtime.resume(thread_id=result.thread_id, approved=approved, reason=reason)
+
+    return result.to_output()
 
 
 def _prompt_for_approval(message: str, thread_id: str) -> tuple[bool, str | None]:
