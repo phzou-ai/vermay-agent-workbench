@@ -82,21 +82,24 @@ Supported read operations:
 
 Dangerous tools require approval and pause the graph through LangGraph interrupt/resume.
 
+In an interactive terminal, the default command prompts for approval in the same process:
+
 ```bash
 mini-agent "apply deployment fix" --thread-id approval-session
-mini-agent --thread-id approval-session --resume-approval false --approval-reason "not allowed"
-mini-agent --thread-id approval-session --resume-approval true --approval-reason "approved"
 ```
 
-Interactive approval in the same terminal process:
+In non-interactive environments, the command returns a manual resume instruction. Manual resume remains available:
 
 ```bash
-mini-agent "apply deployment fix" --interactive-approval
+mini-agent --thread-id approval-session --resume-approval false --approval-reason "not allowed"
+mini-agent --thread-id approval-session --resume-approval true --approval-reason "approved"
 ```
 
 Interactive approval asks at most once per run by default. If the model requests another dangerous tool after approval, the run stops instead of repeatedly prompting.
 
 The default progress output is an indented agent transcript written to stderr.
+
+Detailed interrupt, checkpoint, and resume mechanics are documented in [langgraph-interrupt-resume.md](langgraph-interrupt-resume.md).
 
 Checkpoint data is stored locally:
 

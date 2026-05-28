@@ -109,18 +109,19 @@ Supported operations:
 
 ## Approval Resume
 
-Dangerous tools are interrupted before execution and require explicit resume:
+Dangerous tools are interrupted before execution and require approval.
+
+In an interactive terminal, the default command prompts for approval in the same process:
 
 ```bash
 mini-agent "apply deployment fix" --thread-id approval-session
-mini-agent --thread-id approval-session --resume-approval false --approval-reason "not allowed"
-mini-agent --thread-id approval-session --resume-approval true --approval-reason "approved"
 ```
 
-For an interactive terminal flow in the same process:
+In non-interactive environments, the command returns a manual resume instruction. Manual resume remains available:
 
 ```bash
-mini-agent "apply deployment fix" --interactive-approval
+mini-agent --thread-id approval-session --resume-approval false --approval-reason "not allowed"
+mini-agent --thread-id approval-session --resume-approval true --approval-reason "approved"
 ```
 
 Interactive approval asks at most once per run by default. If the model requests another dangerous tool after approval, the run stops instead of repeatedly prompting.

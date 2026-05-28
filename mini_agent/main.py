@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from mini_agent_langgraph import LangGraphAgentRuntime
@@ -111,11 +112,6 @@ def main() -> None:
     )
     parser.add_argument("--approval-reason", default=None, help="Optional reason for approval resume")
     parser.add_argument(
-        "--interactive-approval",
-        action="store_true",
-        help="Prompt for yes/no approval in the same terminal when a LangGraph interrupt occurs",
-    )
-    parser.add_argument(
         "--graph-stream",
         action="store_true",
         help="Show concise LangGraph stream events in addition to harness progress logs",
@@ -138,10 +134,6 @@ def main() -> None:
     use_graph_stream = args.graph_stream or args.graph_stream_mode is not None
     if use_graph_stream and args.runtime != "langgraph":
         raise SystemExit("--graph-stream is only supported with --runtime langgraph")
-    if args.interactive_approval and args.runtime != "langgraph":
-        raise SystemExit("--interactive-approval is only supported with --runtime langgraph")
-    if args.interactive_approval and args.resume_approval is not None:
-        raise SystemExit("--interactive-approval cannot be combined with --resume-approval")
 
     build = build_langgraph_runtime if args.runtime == "langgraph" else build_runtime
     runtime = build(
@@ -166,7 +158,7 @@ def main() -> None:
         print(runtime.resume_approval(approved=approved, thread_id=args.thread_id, reason=args.approval_reason))
         return
 
-    if args.interactive_approval:
+    if args.runtime == "langgraph" and sys.stdin.isatty():
         stream_modes = parse_stream_modes(args.graph_stream_mode) if use_graph_stream else None
         print(runtime.run_with_interactive_approval(user_input, _prompt_for_approval, stream_modes=stream_modes))
         return
