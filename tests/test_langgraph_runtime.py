@@ -142,6 +142,7 @@ def test_langgraph_runtime_start_returns_run_result_for_approval_interrupt(tmp_p
     assert result.interrupt_message is not None
     assert result.interrupt_message.startswith("Approval required for tool 'dangerous'")
     assert result.to_output() == result.interrupt_message
+    assert not hasattr(runtime, "_pending_interrupt_message")
 
 
 def test_langgraph_runtime_stops_for_dangerous_tool_approval(tmp_path: Path):

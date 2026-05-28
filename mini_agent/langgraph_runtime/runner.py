@@ -30,6 +30,12 @@ from .streaming import DEFAULT_STREAM_MODES, GraphStreamReporter, normalize_stre
 
 
 @dataclass
+class _InterruptData:
+    value: Any
+    message: str
+
+
+@dataclass
 class LangGraphAgentRuntime:
     model: ModelClient
     registry: ToolRegistry
@@ -46,7 +52,6 @@ class LangGraphAgentRuntime:
     checkpoint_path: Path | None = None
     thread_id: str | None = None
     _checkpoint_conn: sqlite3.Connection | None = field(default=None, init=False, repr=False)
-    _pending_interrupt_message: str | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.progress = self.progress or ProgressReporter(enabled=False)
@@ -100,19 +105,22 @@ class LangGraphAgentRuntime:
 
         self.trace.log_event("langgraph_run_started", {"user_input": user_input})
         self.progress.event(None, "run_started", input=user_input, max_steps=self.max_steps)
-        self._pending_interrupt_message = None
 
         initial_state = self._initial_state(user_input)
         thread_id = self.thread_id or str(uuid4())
         self.thread_id = thread_id
         final_state = self._invoke(initial_state, thread_id=thread_id, stream_modes=stream_modes)
 
-        interrupt_message = self._extract_interrupt_message(final_state, thread_id)
-        if interrupt_message is not None:
+        interrupt = self._extract_interrupt(final_state, thread_id)
+        if interrupt is not None:
+            self.trace.log_event(
+                "langgraph_run_interrupted",
+                {"thread_id": thread_id, "interrupt": interrupt.value},
+            )
             return RunResult(
                 thread_id=thread_id,
-                interrupt=self._extract_interrupt_value(final_state),
-                interrupt_message=interrupt_message,
+                interrupt=interrupt.value,
+                interrupt_message=interrupt.message,
                 state=final_state,
             )
 
@@ -136,18 +144,18 @@ class LangGraphAgentRuntime:
         result = self.start(user_input, skills=skills, stream_modes=stream_modes)
         approval_rounds = 0
 
-        while self._pending_interrupt_message is not None:
+        while result.interrupt_message is not None:
             approval_rounds += 1
             if approval_rounds > max_approval_rounds:
                 message = f"Stopped after {max_approval_rounds} approval rounds."
                 self.trace.log_event("langgraph_approval_round_limit_reached", {"message": message})
                 return message
 
-            thread_id = self.thread_id
+            thread_id = result.thread_id
             if not thread_id:
                 raise ValueError("thread_id is required for interactive approval")
 
-            approved, reason = approval_provider(self._pending_interrupt_message, thread_id)
+            approved, reason = approval_provider(result.interrupt_message, thread_id)
             result = self.resume(approved=approved, thread_id=thread_id, reason=reason)
 
         return result.to_output()
@@ -208,7 +216,6 @@ class LangGraphAgentRuntime:
             raise ValueError("thread_id is required to resume an approval interrupt")
 
         self.thread_id = active_thread_id
-        self._pending_interrupt_message = None
         self.trace.log_event(
             "langgraph_resume_approval_requested",
             {"thread_id": active_thread_id, "approved": approved, "reason": reason},
@@ -218,12 +225,16 @@ class LangGraphAgentRuntime:
             config=self._config(active_thread_id),
         )
 
-        interrupt_message = self._extract_interrupt_message(final_state, active_thread_id)
-        if interrupt_message is not None:
+        interrupt = self._extract_interrupt(final_state, active_thread_id)
+        if interrupt is not None:
+            self.trace.log_event(
+                "langgraph_run_interrupted",
+                {"thread_id": active_thread_id, "interrupt": interrupt.value},
+            )
             return RunResult(
                 thread_id=active_thread_id,
-                interrupt=self._extract_interrupt_value(final_state),
-                interrupt_message=interrupt_message,
+                interrupt=interrupt.value,
+                interrupt_message=interrupt.message,
                 state=final_state,
             )
 
@@ -239,16 +250,9 @@ class LangGraphAgentRuntime:
     def _config(self, thread_id: str) -> dict:
         return {"configurable": {"thread_id": thread_id}}
 
-    def _extract_interrupt_value(self, state: dict) -> Any | None:
+    def _extract_interrupt(self, state: dict, thread_id: str) -> _InterruptData | None:
         interrupts = state.get("__interrupt__")
         if not interrupts:
-            return None
-        return getattr(interrupts[0], "value", interrupts[0])
-
-    def _extract_interrupt_message(self, state: dict, thread_id: str) -> str | None:
-        interrupts = state.get("__interrupt__")
-        if not interrupts:
-            self._pending_interrupt_message = None
             return None
 
         interrupt_value = getattr(interrupts[0], "value", interrupts[0])
@@ -256,14 +260,10 @@ class LangGraphAgentRuntime:
         if isinstance(interrupt_value, dict):
             message = interrupt_value.get("message")
         message = message or "Approval required."
-        self.trace.log_event(
-            "langgraph_run_interrupted",
-            {"thread_id": thread_id, "interrupt": interrupt_value},
-        )
-        self._pending_interrupt_message = (
+        interrupt_message = (
             f"{message}\n"
             f"thread_id: {thread_id}\n"
             "Resume with: mini-agent --thread-id "
             f"{thread_id} --resume-approval true"
         )
-        return self._pending_interrupt_message
+        return _InterruptData(value=interrupt_value, message=interrupt_message)

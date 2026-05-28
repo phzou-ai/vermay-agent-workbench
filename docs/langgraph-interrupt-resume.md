@@ -100,7 +100,7 @@ stream_modes is not None
   -> graph.stream(...)
 ```
 
-In stream mode, the runtime explicitly preserves `__interrupt__` chunks from `updates` so downstream interrupt handling can use the same `_extract_interrupt_message()` path.
+In stream mode, the runtime explicitly preserves `__interrupt__` chunks from `updates` so downstream interrupt handling can use the same `_extract_interrupt()` path.
 
 ## Approval Decision Point
 
@@ -144,34 +144,28 @@ Current usage:
 interrupts = state.get("__interrupt__")
 ```
 
-The runner reads this field in `_extract_interrupt_message()` to determine whether the graph paused for approval.
+The runner reads this field in `_extract_interrupt()` to determine whether the graph paused for approval.
 
-If present, the runner builds a user-facing message and stores it in `_pending_interrupt_message`.
+If present, the runner builds a `RunResult` with both the raw interrupt payload and a user-facing interrupt message.
 
-## `_pending_interrupt_message`
+## `RunResult.interrupt_message`
 
-`_pending_interrupt_message` is runtime-local state used by the CLI interactive approval wrapper.
+`RunResult.interrupt_message` is the CLI-facing approval message produced from LangGraph interrupt data.
 
-It is not persisted in LangGraph checkpoint state.
+It is not persisted in LangGraph checkpoint state. It is derived from the latest graph result.
 
 Purpose:
 
 ```text
 LangGraph interrupt result
   -> runtime extracts approval message
-  -> runtime stores pending message in _pending_interrupt_message
+  -> runtime returns RunResult(interrupt=..., interrupt_message=...)
   -> CLI prompt displays it
   -> user approves or rejects
   -> runtime resumes the graph
 ```
 
-The field is set only when `_extract_interrupt_message()` sees `__interrupt__`.
-
-It is cleared when:
-
-- a new run starts,
-- resume starts,
-- the latest graph result has no interrupt.
+The interactive approval wrapper uses the returned `RunResult` as control flow. If `result.interrupt_message` is present, it prompts for approval. If it is absent, the wrapper returns `result.to_output()`.
 
 ## Manual Resume
 
@@ -234,7 +228,7 @@ run_with_interactive_approval()
   -> return final answer
 ```
 
-`run_with_interactive_approval()` does not repeat an already-completed graph run. It starts the graph once through `run()`. It only resumes when `run()` stops at an interrupt and sets `_pending_interrupt_message`.
+`run_with_interactive_approval()` does not repeat an already-completed graph run. It starts the graph once through `start()`. It only resumes when the returned `RunResult` contains an interrupt message.
 
 Current safety limit:
 
@@ -254,7 +248,7 @@ The CLI-backed runtime stores LangGraph checkpoints in:
 traces/langgraph_checkpoints.sqlite
 ```
 
-The checkpoint contains graph state needed for resume. The terminal progress output and `_pending_interrupt_message` are not the source of truth for resume.
+The checkpoint contains graph state needed for resume. The terminal progress output and `RunResult.interrupt_message` are not the source of truth for resume.
 
 The source of truth is:
 
@@ -276,8 +270,8 @@ LangGraph layer:
   Command(resume=...)
 
 CLI/runtime layer:
-  _extract_interrupt_message()
-  _pending_interrupt_message
+  _extract_interrupt()
+  RunResult.interrupt_message
   interactive yes/no prompt
   resume_approval()
 ```
