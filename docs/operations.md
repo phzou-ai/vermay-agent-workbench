@@ -79,7 +79,7 @@ Dangerous tools require approval and pause the graph through LangGraph interrupt
 In an interactive terminal, the default command prompts for approval in the same process:
 
 ```bash
-mini-agent "apply deployment fix" --thread-id approval-session
+mini-agent "run a dangerous operation" --thread-id approval-session
 ```
 
 In non-interactive environments, the command returns a manual resume instruction. Manual resume remains available:

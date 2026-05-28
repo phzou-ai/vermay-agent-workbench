@@ -180,6 +180,8 @@ Introduce test fixtures only if duplication starts blocking changes. Current dup
 
 `ToolNode` should not replace the active tool execution node yet.
 
+The detailed compatibility evaluation has been moved to the companion `mini-agent-docs` workspace.
+
 The adapter module is acceptable:
 
 ```text
