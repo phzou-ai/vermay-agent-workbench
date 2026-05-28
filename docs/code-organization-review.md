@@ -94,16 +94,11 @@ Lower-risk alternative:
 - extract `_build_checkpointer` into `checkpointing.py`
 - extract stream invocation into `streaming.py` beside the existing reporter helpers
 
-### 3. Shared Harness and Handwritten Runtime Share the Same Package
+### 3. Shared Harness Modules Remain Flat
 
 Current state:
 
-`mini_agent/` contains both:
-
-- shared harness modules used by LangGraph
-- the compact handwritten runtime
-
-Examples of shared modules:
+`mini_agent/` contains shared harness modules used by the LangGraph runtime:
 
 - `context_builder.py`
 - `tool_registry.py`
@@ -114,20 +109,16 @@ Examples of shared modules:
 - `progress.py`
 - `types.py`
 
-Handwritten runtime:
-
-- `runtime.py`
-
 Risk:
 
-- The package name makes it easy to confuse shared harness code with the older runtime path.
-- Future changes may accidentally optimize for the handwritten runtime instead of the LangGraph runtime.
+- As more runtime features are added, the package root may become a broad collection of unrelated infrastructure.
+- Moving all modules too early would create import churn without a concrete maintenance benefit.
 
 Recommended cleanup:
 
 Do not move packages yet. Moving modules now would create churn across imports and tests.
 
-Instead, update documentation and keep `runtime.py` clearly described as compatibility/reference code. If the project grows, introduce a new package later:
+If the project grows, introduce a dedicated harness package later:
 
 ```text
 mini_agent_core/
@@ -147,7 +138,7 @@ This should wait until there is a concrete maintenance reason.
 
 ### Duplicate Summary Helpers
 
-Both the handwritten runtime and LangGraph nodes contain similar helpers:
+Runtime nodes need concise terminal summaries for:
 
 - Kubernetes command summary
 - tool exit code extraction
@@ -161,7 +152,7 @@ Extract these into a shared helper module:
 mini_agent/result_summary.py
 ```
 
-Status: completed. Both runtime paths now use `mini_agent/result_summary.py`.
+Status: completed. The LangGraph runtime uses `mini_agent/result_summary.py`.
 
 ### Tool Registration Files Are Serviceable but Growing
 
@@ -204,7 +195,6 @@ It is not on the active runtime path. It records the shape conversion needed if 
 3. Extract custom stream event helper from `nodes.py`.
 4. Consider splitting `nodes.py` only when the next graph feature requires touching it.
 5. Keep `runner.py` intact until checkpointing or stream invocation changes again.
-6. Keep `mini_agent/runtime.py` as compatibility/reference code, but do not optimize new work around it.
 
 ## Do Not Do Yet
 

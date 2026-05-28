@@ -19,16 +19,10 @@ mini-agent "grep nginx errors"
 mini-agent "weather forecast for Shanghai"
 ```
 
-The default runtime is LangGraph:
+The CLI uses the LangGraph runtime:
 
 ```bash
 mini-agent "grep nginx errors"
-```
-
-The handwritten runtime remains available:
-
-```bash
-mini-agent "grep nginx errors" --runtime handwritten
 ```
 
 ## Model Configuration

@@ -5,7 +5,7 @@
 `mini_agent/main.py`
 
 - Defines the `mini-agent` CLI.
-- Builds either the default LangGraph runtime or the handwritten runtime.
+- Builds the LangGraph runtime.
 - Wires model, tools, memory, trace, progress reporting, and checkpoint storage.
 - Handles approval resume CLI options.
 

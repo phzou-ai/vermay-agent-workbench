@@ -69,3 +69,19 @@ def test_parse_tool_call_missing_arguments_defaults_to_empty_dict():
     assert response.tool_call is not None
     assert response.tool_call.name == "grep_logs"
     assert response.tool_call.arguments == {}
+
+
+def test_parse_first_tool_call_when_model_returns_multiple_json_actions():
+    response = parse(
+        "\n".join(
+            [
+                '{"action":"tool_call","name":"ssh_kubectl_get","arguments":{"resource":"nodes","namespace":"all"}}',
+                '{"action":"tool_call","name":"ssh_kubectl_get","arguments":{"resource":"pods","namespace":"all"}}',
+            ]
+        )
+    )
+
+    assert response.content == "Calling tool ssh_kubectl_get."
+    assert response.tool_call is not None
+    assert response.tool_call.name == "ssh_kubectl_get"
+    assert response.tool_call.arguments == {"resource": "nodes", "namespace": "all"}

@@ -2,7 +2,7 @@
 
 Mini Agent Workbench is a Python project for validating and practicing agent runtime patterns in concrete command-line workflows.
 
-The current default runtime is LangGraph. The project keeps the core harness boundaries explicit so agent behavior can be inspected, tested, and extended without hiding tool execution, permission checks, or observations inside a single opaque node.
+The runtime is built on LangGraph. The project keeps the core harness boundaries explicit so agent behavior can be inspected, tested, and extended without hiding tool execution, permission checks, or observations inside a single opaque node.
 
 Current focus:
 
@@ -34,16 +34,10 @@ mini-agent "grep nginx errors"
 mini-agent "weather forecast for Shanghai"
 ```
 
-The LangGraph runtime is the default:
+The CLI uses the LangGraph runtime:
 
 ```bash
 mini-agent "grep nginx errors"
-```
-
-The compact handwritten runtime remains available:
-
-```bash
-mini-agent "grep nginx errors" --runtime handwritten
 ```
 
 ## Ollama Configuration

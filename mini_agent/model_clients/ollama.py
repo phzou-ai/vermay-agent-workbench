@@ -93,9 +93,24 @@ class OllamaModelClient:
         try:
             decision = json.loads(normalized)
         except json.JSONDecodeError:
-            return ModelResponse(content=content)
+            decision = self._parse_first_json_object(normalized)
+            if decision is None:
+                return ModelResponse(content=content)
 
         return self._parse_decision(decision)
+
+    def _parse_first_json_object(self, content: str) -> dict | None:
+        if not content.startswith("{"):
+            return None
+        try:
+            decision, _ = json.JSONDecoder().raw_decode(content)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(decision, dict):
+            return None
+        if "action" not in decision:
+            return None
+        return decision
 
     def _to_ollama_messages(self, messages: list[Message], tools: list[dict]) -> list[dict[str, str]]:
         protocol = {

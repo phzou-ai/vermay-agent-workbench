@@ -13,7 +13,6 @@ from .model_clients import OllamaModelClient
 from .observation import ObservationHandler
 from .permission import PermissionGate
 from .progress import ProgressReporter
-from .runtime import MiniAgentRuntime
 from .tool_executor import ToolExecutor
 from .tool_registry import ToolRegistry
 from .tools.devops import register_devops_tools
@@ -22,36 +21,6 @@ from .trace import TraceLogger
 
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def build_runtime(
-    trace_name: str = "latest.jsonl",
-    ollama_model: str | None = None,
-    ollama_base_url: str | None = None,
-    ollama_timeout_seconds: int | None = None,
-    max_steps: int = 5,
-    show_progress: bool = True,
-) -> MiniAgentRuntime:
-    registry = ToolRegistry()
-    register_devops_tools(registry)
-    register_weather_tools(registry)
-
-    return MiniAgentRuntime(
-        model=OllamaModelClient(
-            model=ollama_model,
-            base_url=ollama_base_url,
-            timeout_seconds=ollama_timeout_seconds,
-        ),
-        registry=registry,
-        context_builder=ContextBuilder(),
-        permission_gate=PermissionGate(registry),
-        tool_executor=ToolExecutor(registry),
-        observation_handler=ObservationHandler(),
-        memory=MemoryStore(ROOT / "data" / "memory.txt"),
-        trace=TraceLogger(ROOT / "traces" / trace_name),
-        max_steps=max_steps,
-        progress=ProgressReporter(enabled=show_progress),
-    )
 
 
 def build_langgraph_runtime(
@@ -122,53 +91,35 @@ def main() -> None:
         default=None,
         help="LangGraph stream mode to inspect. Repeat or use comma-separated values: updates, values, debug, custom",
     )
-    parser.add_argument(
-        "--runtime",
-        choices=["handwritten", "langgraph"],
-        default="langgraph",
-        help="Runtime implementation to use",
-    )
     args = parser.parse_args()
 
     user_input = " ".join(args.prompt).strip() or "check cluster status"
     use_graph_stream = args.graph_stream or args.graph_stream_mode is not None
-    if use_graph_stream and args.runtime != "langgraph":
-        raise SystemExit("--graph-stream is only supported with --runtime langgraph")
 
-    build = build_langgraph_runtime if args.runtime == "langgraph" else build_runtime
-    runtime = build(
+    runtime = build_langgraph_runtime(
         trace_name=args.trace,
         ollama_model=args.ollama_model,
         ollama_base_url=args.ollama_base_url,
         ollama_timeout_seconds=args.ollama_timeout_seconds,
         max_steps=args.max_steps,
         show_progress=not args.no_progress,
-        **(
-            {"thread_id": args.thread_id, "show_graph_stream": use_graph_stream}
-            if build is build_langgraph_runtime
-            else {}
-        ),
+        thread_id=args.thread_id,
+        show_graph_stream=use_graph_stream,
     )
     if args.resume_approval is not None:
-        if args.runtime != "langgraph":
-            raise SystemExit("--resume-approval is only supported with --runtime langgraph")
         if not args.thread_id:
             raise SystemExit("--thread-id is required with --resume-approval")
         approved = args.resume_approval == "true"
         print(runtime.resume_approval(approved=approved, thread_id=args.thread_id, reason=args.approval_reason))
         return
 
-    if args.runtime == "langgraph" and sys.stdin.isatty():
-        stream_modes = parse_stream_modes(args.graph_stream_mode) if use_graph_stream else None
+    stream_modes = parse_stream_modes(args.graph_stream_mode) if use_graph_stream else None
+
+    if sys.stdin.isatty():
         print(runtime.run_with_interactive_approval(user_input, _prompt_for_approval, stream_modes=stream_modes))
         return
 
-    if use_graph_stream:
-        stream_modes = parse_stream_modes(args.graph_stream_mode)
-        print(runtime.run(user_input, stream_modes=stream_modes))
-        return
-
-    print(runtime.run(user_input))
+    print(runtime.run(user_input, stream_modes=stream_modes))
 
 
 def _prompt_for_approval(message: str, thread_id: str) -> tuple[bool, str | None]:
