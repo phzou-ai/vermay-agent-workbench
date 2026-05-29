@@ -5,8 +5,9 @@
 `mini_agent/main.py`
 
 - Defines the `mini-agent` CLI.
-- Builds the LangGraph runtime.
+- Builds the selected LangGraph runtime.
 - Wires model, tools, memory, trace, progress reporting, and checkpoint storage.
+- Supports controlled runtime comparison through `--runtime reference` and `--runtime standard`.
 - Handles approval resume CLI options.
 - Owns terminal-only interactive approval prompting.
 
@@ -21,21 +22,24 @@
 - `routing.py`: conditional edge routing functions.
 - `state.py`: graph state shape.
 - `streaming.py`: optional LangGraph stream inspection and summarized graph stream reporting.
-- `toolnode_adapter.py`: adapters between project tool types and LangChain/LangGraph tool message types; not part of the active runtime path yet.
+- `toolnode_adapter.py`: adapters between project tool types and LangChain/LangGraph tool message types; retained for reference-runtime compatibility experiments.
 - `adapters.py`: payload conversion helpers for trace and progress output.
 
-This package remains the current CLI runtime and the reference baseline for harness mechanics. It should not keep expanding as the future production-oriented runtime unless a task explicitly targets the reference baseline.
+This package remains the default CLI runtime and the reference baseline for harness mechanics. It should not keep expanding as the future production-oriented runtime unless a task explicitly targets the reference baseline.
 
 ## Standard LangGraph Runtime
 
 `mini_agent/standard_runtime/`
 
-- `state.py`: standard LangGraph state skeleton using `messages: Annotated[list[BaseMessage], add_messages]`.
-- `nodes.py`: initial standard model node boundary returning `AIMessage`.
+- `state.py`: standard LangGraph state using `messages: Annotated[list[BaseMessage], add_messages]`.
+- `nodes.py`: standard model, permission, approval, tool-message recording, and loop-control nodes.
 - `routing.py`: standard message routing helpers based on `AIMessage.tool_calls`.
-- `graph.py`: minimal standard graph skeleton.
+- `graph.py`: standard graph using `ToolNode` after permission and approval checks.
+- `runner.py`: runtime wrapper with start/resume methods.
+- `model_adapters.py`: adapter from the project Ollama client to `AIMessage` / `tool_calls`.
+- `tools.py`: conversion from project `ToolSpec` to LangChain `StructuredTool`.
 
-This package is not wired into the CLI yet. It is the future production-oriented runtime direction that should align with LangChain / LangGraph standard message and tool execution types.
+This package can be selected with `mini-agent "<prompt>" --runtime standard`. It is the future production-oriented runtime direction and is being compared against the reference runtime before any default switch.
 
 ## Shared Harness Components
 

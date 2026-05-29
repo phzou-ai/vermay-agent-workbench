@@ -1,15 +1,32 @@
 from __future__ import annotations
 
 from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import ToolNode
 
-from .nodes import StandardGraphComponents, call_model_node
-from .routing import route_after_model
+from .nodes import (
+    StandardGraphComponents,
+    approval_required_node,
+    call_model_node,
+    check_permission_node,
+    increment_loop_node,
+    max_loops_node,
+    record_tool_messages_node,
+    reject_tool_node,
+)
+from .routing import route_after_approval, route_after_model, route_after_permission, route_loop_limit
 from .state import StandardAgentState
 
 
 def build_standard_graph(components: StandardGraphComponents, checkpointer=None):
     graph = StateGraph(StandardAgentState)
     graph.add_node("call_model", call_model_node(components))
+    graph.add_node("check_permission", check_permission_node(components))
+    graph.add_node("approval_required", approval_required_node(components))
+    graph.add_node("reject_tool", reject_tool_node(components))
+    graph.add_node("tools", ToolNode(components.tools, handle_tool_errors=True))
+    graph.add_node("record_tool_messages", record_tool_messages_node(components))
+    graph.add_node("increment_loop", increment_loop_node(components))
+    graph.add_node("max_loops", max_loops_node(components))
 
     graph.add_edge(START, "call_model")
     graph.add_conditional_edges(
@@ -17,8 +34,37 @@ def build_standard_graph(components: StandardGraphComponents, checkpointer=None)
         route_after_model,
         {
             "final": END,
-            "tool_calls": END,
+            "tool_calls": "check_permission",
         },
     )
+    graph.add_conditional_edges(
+        "check_permission",
+        route_after_permission,
+        {
+            "allowed": "tools",
+            "approval_required": "approval_required",
+            "denied": "reject_tool",
+        },
+    )
+    graph.add_conditional_edges(
+        "approval_required",
+        route_after_approval,
+        {
+            "approved": "tools",
+            "rejected": "reject_tool",
+        },
+    )
+    graph.add_edge("reject_tool", END)
+    graph.add_edge("tools", "record_tool_messages")
+    graph.add_edge("record_tool_messages", "increment_loop")
+    graph.add_conditional_edges(
+        "increment_loop",
+        route_loop_limit,
+        {
+            "continue": "call_model",
+            "max_loops": "max_loops",
+        },
+    )
+    graph.add_edge("max_loops", END)
 
     return graph.compile(checkpointer=checkpointer)

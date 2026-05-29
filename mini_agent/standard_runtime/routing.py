@@ -23,6 +23,22 @@ def route_after_model(state: StandardAgentState) -> str:
     return "final"
 
 
+def route_after_permission(state: StandardAgentState) -> str:
+    permission = state.get("permission") or {}
+    if permission.get("status") == "allowed":
+        return "allowed"
+    if permission.get("status") == "approval_required":
+        return "approval_required"
+    return "denied"
+
+
+def route_after_approval(state: StandardAgentState) -> str:
+    approval = state.get("approval") or {}
+    if approval.get("approved") is True:
+        return "approved"
+    return "rejected"
+
+
 def route_loop_limit(state: StandardAgentState) -> str:
     if state["loop_index"] > state["max_loops"]:
         return "max_loops"

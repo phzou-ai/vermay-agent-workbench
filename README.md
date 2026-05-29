@@ -41,7 +41,7 @@ Core harness modules include `context_builder.py`, `tool_registry.py`, `tool_exe
 
 `mini_agent/langgraph_runtime/` is the current orchestration layer that wires those harness components into a LangGraph state machine. It now serves as the reference baseline for harness mechanics.
 
-`mini_agent/standard_runtime/` contains the first skeleton of the future production-oriented runtime. That path aligns with LangChain / LangGraph standard message types such as `BaseMessage`, `AIMessage.tool_calls`, `ToolMessage`, and `add_messages`, but it is not wired into the CLI yet.
+`mini_agent/standard_runtime/` is the production-oriented runtime candidate. That path aligns with LangChain / LangGraph standard message types such as `BaseMessage`, `AIMessage.tool_calls`, `ToolMessage`, `ToolNode`, and `add_messages`. It can be selected from the CLI for parity checks.
 
 ## Install
 
@@ -56,10 +56,20 @@ python -m pip install -e .
 ## Run
 
 ```bash
-mini-agent "weather forecast for Beijing"
+mini-agent "weather forecast for Shanghai"
 ```
 
-The CLI currently uses the reference LangGraph runtime in `mini_agent/langgraph_runtime/`.
+The CLI uses the reference LangGraph runtime by default:
+
+```bash
+mini-agent "weather forecast for Shanghai"
+```
+
+The standard runtime can be selected explicitly:
+
+```bash
+mini-agent "weather forecast for Shanghai" --runtime standard
+```
 
 By default, the CLI prints a compact harness progress transcript to stderr. This is produced by `ProgressReporter` and shows each agent loop as readable event blocks: context build, model call, tool call, permission check, tool result, observation, and final answer.
 
@@ -67,10 +77,10 @@ LangGraph stream inspection is separate and disabled by default. `GraphStreamRep
 
 ```bash
 # default harness progress
-mini-agent "weather forecast for Beijing"
+mini-agent "weather forecast for Shanghai"
 
 # LangGraph stream debug inspection
-mini-agent "weather forecast for Beijing" --graph-stream
+mini-agent "weather forecast for Shanghai" --graph-stream
 ```
 
 ## Model Client
@@ -89,10 +99,10 @@ CLI override example:
 
 ```bash
 # default model configuration
-mini-agent "weather forecast for Beijing"
+mini-agent "weather forecast for Shanghai"
 
 # override model client settings
-mini-agent "weather forecast for Beijing" \
+mini-agent "weather forecast for Shanghai" \
   --ollama-model qwen3.6:27b \
   --ollama-base-url http://127.0.0.1:11434 \
   --ollama-timeout-seconds 120

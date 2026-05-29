@@ -8,6 +8,7 @@ from langgraph.graph.message import add_messages
 
 class StandardAgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
+    permission: dict[str, Any] | None
     approval: dict[str, Any] | None
     final_answer: str | None
     loop_index: int
@@ -27,6 +28,7 @@ def build_initial_state(
     messages.append(HumanMessage(content=user_input))
     return {
         "messages": messages,
+        "permission": None,
         "approval": None,
         "final_answer": None,
         "loop_index": 1,
