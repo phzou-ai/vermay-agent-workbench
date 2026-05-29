@@ -10,7 +10,7 @@
 - Handles approval resume CLI options.
 - Owns terminal-only interactive approval prompting.
 
-## LangGraph Runtime
+## Reference LangGraph Runtime
 
 `mini_agent/langgraph_runtime/`
 
@@ -23,6 +23,19 @@
 - `streaming.py`: optional LangGraph stream inspection and summarized graph stream reporting.
 - `toolnode_adapter.py`: adapters between project tool types and LangChain/LangGraph tool message types; not part of the active runtime path yet.
 - `adapters.py`: payload conversion helpers for trace and progress output.
+
+This package remains the current CLI runtime and the reference baseline for harness mechanics. It should not keep expanding as the future production-oriented runtime unless a task explicitly targets the reference baseline.
+
+## Standard LangGraph Runtime
+
+`mini_agent/standard_runtime/`
+
+- `state.py`: standard LangGraph state skeleton using `messages: Annotated[list[BaseMessage], add_messages]`.
+- `nodes.py`: initial standard model node boundary returning `AIMessage`.
+- `routing.py`: standard message routing helpers based on `AIMessage.tool_calls`.
+- `graph.py`: minimal standard graph skeleton.
+
+This package is not wired into the CLI yet. It is the future production-oriented runtime direction that should align with LangChain / LangGraph standard message and tool execution types.
 
 ## Shared Harness Components
 

@@ -128,6 +128,24 @@ Machine-readable traces are written to:
 traces/*.jsonl
 ```
 
+## Reporter Policy
+
+The project keeps three observability outputs with separate responsibilities.
+
+`ProgressReporter` is the default human-facing CLI transcript. It should stay concise and describe harness-level behavior. It uses `loop N` in terminal output because the value represents one agent decision loop, not a LangGraph node step.
+
+`GraphStreamReporter` is a debug view over LangGraph stream chunks. It should expose graph-level runtime information only when explicitly requested with `--graph-stream` or `--graph-stream-mode`.
+
+`TraceLogger` is the durable machine-readable audit log. It can store fuller payloads than terminal output, including tool results, observations, permission decisions, and raw model responses.
+
+The current state and trace schema still use the field name `step`. In this codebase, `step` currently means agent loop iteration. Future code should prefer `loop_index` for new internal fields that represent this concept.
+
+Do not merge these outputs into one reporter:
+
+- terminal progress optimizes for scanability
+- graph stream optimizes for graph runtime inspection
+- JSONL trace optimizes for replay, audit, and later evaluation
+
 ## Tests
 
 ```bash

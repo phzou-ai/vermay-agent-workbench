@@ -39,7 +39,9 @@ build context
 
 Core harness modules include `context_builder.py`, `tool_registry.py`, `tool_executor.py`, `permission.py`, `observation.py`, `trace.py`, `progress.py`, and `types.py`.
 
-`mini_agent/langgraph_runtime/` is the orchestration layer that wires those harness components into a LangGraph state machine.
+`mini_agent/langgraph_runtime/` is the current orchestration layer that wires those harness components into a LangGraph state machine. It now serves as the reference baseline for harness mechanics.
+
+`mini_agent/standard_runtime/` contains the first skeleton of the future production-oriented runtime. That path aligns with LangChain / LangGraph standard message types such as `BaseMessage`, `AIMessage.tool_calls`, `ToolMessage`, and `add_messages`, but it is not wired into the CLI yet.
 
 ## Install
 
@@ -57,7 +59,7 @@ python -m pip install -e .
 mini-agent "weather forecast for Beijing"
 ```
 
-The CLI uses the LangGraph runtime in `mini_agent/langgraph_runtime/`.
+The CLI currently uses the reference LangGraph runtime in `mini_agent/langgraph_runtime/`.
 
 By default, the CLI prints a compact harness progress transcript to stderr. This is produced by `ProgressReporter` and shows each agent loop as readable event blocks: context build, model call, tool call, permission check, tool result, observation, and final answer.
 
