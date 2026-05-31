@@ -18,9 +18,30 @@ mini-agent "weather forecast for Shanghai"
 
 The CLI uses `mini_agent/langgraph_runtime/`. No alternate runtime is exposed through the active CLI.
 
+## Local Storage
+
+Runtime metadata and generated artifacts are local by default:
+
+```text
+data/agent.sqlite
+data/checkpoints/langgraph.sqlite
+data/eval_runs/*.json
+data/skill_proposals/*.md
+traces/*.jsonl
+```
+
+The tracked configuration and scenario locations are:
+
+```text
+config/model_profiles.json
+config/mcp_servers.json
+evals/scenarios/*.json
+skills/*.md
+```
+
 ## Model Configuration
 
-The runtime builds model adapters through a provider factory. The current provider is `ollama`.
+The runtime builds model adapters through a provider factory. Supported providers are `ollama`, `openai_compatible`, and `router`.
 
 Default Ollama configuration is read from `.env` and can be overridden by `.env.local`, `.env.dev.local`, shell environment variables, or CLI flags.
 
@@ -56,6 +77,72 @@ mini-agent "weather forecast for Shanghai" \
 `timeout_seconds` must be a positive integer.
 
 The CLI maps provider flags and generic model options into `ModelProviderConfig(provider, options)`. Runtime assembly lives in `mini_agent/app_factory.py`; provider-specific model construction lives in `mini_agent/langgraph_runtime/model_factory.py`.
+
+OpenAI-compatible endpoint example:
+
+```bash
+mini-agent "weather forecast for Shanghai" \
+  --model-provider openai_compatible \
+  --model-option model=qwen \
+  --model-option base_url=http://localhost:8000/v1
+```
+
+Rule-router example:
+
+```bash
+mini-agent "weather forecast for Shanghai" \
+  --model-provider router \
+  --model-option route_config=config/model_profiles.json
+```
+
+Routing v1 is deterministic and based on prompt keywords, message length, and tool-error presence.
+
+## Memory
+
+Memory writes are explicit:
+
+```bash
+mini-agent memory add "Prefer read-only Kubernetes inspection first." --tag k8s --tag preference
+mini-agent memory list
+mini-agent memory disable 1
+```
+
+Enabled memory is selected by deterministic keyword, tag, and latest-item matching and injected as system context before the user message.
+
+## Skills
+
+Authored skills are markdown files under `skills/` with front matter fields `name`, `description`, `triggers`, and `version`.
+
+```bash
+mini-agent skills list
+mini-agent skills show kubernetes-readonly-debug
+mini-agent skills propose-from-trace --trace traces/latest.jsonl
+mini-agent skills approve <proposal-id>
+```
+
+Generated skills remain proposals under `data/skill_proposals/` until approved.
+
+## Evaluation Replay
+
+Replay uses recorded tool outputs only. It does not execute live SSH, MCP, or dangerous tools.
+
+```bash
+mini-agent eval replay --trace traces/latest.jsonl
+mini-agent eval replay --scenario evals/scenarios/weather.json
+mini-agent eval list-runs
+```
+
+Eval metadata is stored in `data/agent.sqlite`; full reports are written under `data/eval_runs/`.
+
+## MCP Client
+
+MCP client configuration lives in `config/mcp_servers.json`.
+
+```bash
+mini-agent mcp list-tools
+```
+
+MCP tools are approval-required by default. A server or individual tool must be explicitly marked read-only in config to bypass approval.
 
 ## Trace Path
 

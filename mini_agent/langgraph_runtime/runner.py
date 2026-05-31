@@ -11,6 +11,7 @@ from langgraph.types import Command
 from .results import RunResult
 from mini_agent.permission import PermissionGate
 from mini_agent.progress import ProgressReporter
+from mini_agent.runtime_context import RuntimeContextProvider
 from mini_agent.trace import TraceLogger
 
 from .graph import build_graph
@@ -28,6 +29,7 @@ class LangGraphAgentRuntime:
     checkpointer: object | None = None
     progress: ProgressReporter | None = None
     trace: TraceLogger | None = None
+    context_provider: RuntimeContextProvider | None = None
     close_callbacks: list[Callable[[], None]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -96,7 +98,15 @@ class LangGraphAgentRuntime:
         )
 
     def _initial_state(self, user_input: str) -> AgentState:
-        return build_initial_state(user_input, system_prompt=self.system_prompt, max_loops=self.max_loops)
+        context_messages = None
+        if self.context_provider is not None:
+            context_messages = self.context_provider.context_messages(user_input)
+        return build_initial_state(
+            user_input,
+            system_prompt=self.system_prompt,
+            context_messages=context_messages,
+            max_loops=self.max_loops,
+        )
 
     def _config(self, thread_id: str) -> dict:
         return {"configurable": {"thread_id": thread_id}}

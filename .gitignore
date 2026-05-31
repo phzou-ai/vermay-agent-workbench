@@ -8,8 +8,12 @@ __pycache__/
 .env.*.local
 
 data/memory.txt
+data/agent.sqlite
+data/agent.sqlite-*
 data/checkpoints/*.sqlite
 data/checkpoints/*.sqlite-*
+data/eval_runs/*.json
+data/skill_proposals/*.md
 traces/*.jsonl
 traces/*.sqlite
 !traces/.gitkeep

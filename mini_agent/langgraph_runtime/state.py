@@ -20,11 +20,14 @@ def build_initial_state(
     user_input: str,
     *,
     system_prompt: str | None = None,
+    context_messages: list[BaseMessage] | None = None,
     max_loops: int = 5,
 ) -> AgentState:
     messages: list[BaseMessage] = []
     if system_prompt:
         messages.append(SystemMessage(content=system_prompt))
+    if context_messages:
+        messages.extend(context_messages)
     messages.append(HumanMessage(content=user_input))
     return {
         "messages": messages,

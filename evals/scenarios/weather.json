@@ -1,0 +1,16 @@
+{
+  "name": "weather-shanghai",
+  "input": "weather forecast for Shanghai",
+  "tool_observations": [
+    {
+      "name": "weather_forecast",
+      "ok": true,
+      "content": "Shanghai weather forecast fixture"
+    }
+  ],
+  "final_answer": "Shanghai Weather Forecast",
+  "expect": {
+    "tool_sequence": ["weather_forecast"],
+    "final_contains": ["Shanghai"]
+  }
+}

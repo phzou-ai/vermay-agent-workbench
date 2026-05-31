@@ -8,6 +8,7 @@
 - Parses CLI arguments and maps them to runtime factory configuration.
 - Converts provider-specific flags and `--model-option key=value` into model provider options.
 - Handles approval resume CLI options.
+- Dispatches non-runtime subcommands for memory, skills, eval replay, and MCP inspection.
 - Owns terminal-only interactive approval prompting.
 
 ## Runtime Factory
@@ -16,10 +17,10 @@
 
 - Defines `RuntimeFactoryConfig`.
 - Builds the active LangGraph runtime through `build_runtime()`.
-- Wires model adapters, tools, permission checks, trace logging, progress reporting, and approval handling.
+- Wires model adapters, tools, permission checks, trace logging, progress reporting, memory, skills, and approval handling.
 - Injects the CLI SQLite checkpointer.
 - Registers runtime close callbacks for owned resources such as SQLite connections.
-- Owns factory-level paths such as `trace_path` and `checkpoint_path`.
+- Owns factory-level paths such as `trace_path`, `checkpoint_path`, `agent_store_path`, `skills_path`, and `mcp_config_path`.
 
 ## LangGraph Runtime
 
@@ -31,7 +32,7 @@
 - `graph.py`: graph topology using `ToolNode` after permission and approval checks.
 - `runner.py`: runtime wrapper around the compiled graph.
 - `results.py`: structured runtime result type and API-facing result payload helpers.
-- `model_adapters.py`: adapter from the project model client to a thin `AIMessage` wrapper.
+- `model_adapters.py`: adapters from project model clients to a thin `AIMessage` wrapper, plus deterministic model routing.
 - `model_factory.py`: provider factory for constructing runtime model adapters.
 
 This package is the only active runtime path. It is the production-oriented path and uses LangChain / LangGraph standard message and tool execution types.
@@ -49,7 +50,12 @@ This package is the only active runtime path. It is the production-oriented path
 - `result_summary.py`: shared summary helpers for terminal progress output.
 - `trace.py`: writes JSONL runtime events.
 - `progress.py`: renders the default human-readable harness progress transcript.
-- `memory.py`: minimal file-backed memory placeholder.
+- `storage.py`: local SQLite metadata store.
+- `memory.py`: SQLite-backed explicit-write memory.
+- `skills.py`: authored skill parser, retrieval, proposal generation, and approval.
+- `runtime_context.py`: injects selected memory and skills as initial system context.
+- `evaluation.py`: trace/scenario replay reporting without live tool execution.
+- `mcp_client.py`: configured MCP client discovery and `StructuredTool` wrapping.
 - `types.py`: shared dataclasses for project message, tool-call, result, observation, and model-response payloads.
 
 The active tool schema source is each tool's Pydantic `args_schema`. Model adapters and `ToolRegistry.schemas()` both derive schemas from the same `StructuredTool` objects that `ToolNode` executes.
@@ -69,8 +75,9 @@ The active tool schema source is each tool's Pydantic `args_schema`. Model adapt
 - Builds provider-specific model adapters for the active runtime.
 - Accepts `ModelProviderConfig(provider, options)`.
 - Validates provider-specific options.
-- Currently supports `ollama`.
-- Future providers such as vLLM or OpenAI should be added here instead of being wired directly into `main.py` or `app_factory.py`.
+- Supports `ollama`, `openai_compatible`, and `router`.
+- `openai_compatible` targets OpenAI-style `/chat/completions` endpoints such as vLLM.
+- `router` loads profiles and deterministic routing rules from `config/model_profiles.json`.
 
 ## Tool Domains
 
@@ -84,6 +91,8 @@ The active tool schema source is each tool's Pydantic `args_schema`. Model adapt
 `mini_agent/tools/weather/`
 
 - `weather_forecast` read-only external data tool backed by `wttr.in`.
+
+Configured MCP tools are loaded from `config/mcp_servers.json` during runtime construction. Discovered MCP tools are wrapped as `StructuredTool` objects and registered through the same `ToolRegistry` path as built-in tools.
 
 ## Infrastructure
 

@@ -5,7 +5,7 @@ LangGraph standard message types and ToolNode-backed tool execution.
 """
 
 from .graph import build_graph
-from .model_adapters import ModelInvocation, OllamaModelAdapter
+from .model_adapters import ModelInvocation, OllamaModelAdapter, OpenAICompatibleModelAdapter, RuleRouterModelAdapter
 from .model_factory import ModelProviderConfig, build_model_client
 from .nodes import GraphComponents, ModelClient
 from .runner import LangGraphAgentRuntime
@@ -19,6 +19,8 @@ __all__ = [
     "ModelInvocation",
     "ModelProviderConfig",
     "OllamaModelAdapter",
+    "OpenAICompatibleModelAdapter",
+    "RuleRouterModelAdapter",
     "build_model_client",
     "build_initial_state",
     "build_graph",

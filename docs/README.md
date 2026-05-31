@@ -4,7 +4,7 @@
 
 This directory contains stable project-facing documentation for Mini Agent Workbench.
 
-The project is positioned as an agent validation and practice workbench. It is intended to provide a concrete runtime for testing agent orchestration, tool execution, approval control, observability, and real-world integration patterns.
+The project is positioned as an agent validation and practice workbench. It provides a concrete runtime for testing agent orchestration, tool execution, approval control, memory, skills, evaluation replay, model routing, MCP client integration, and real-world tool patterns.
 
 ## Reading Order
 

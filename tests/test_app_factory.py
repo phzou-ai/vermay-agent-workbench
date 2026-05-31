@@ -10,6 +10,10 @@ def test_app_factory_builds_runtime_with_registered_tools(tmp_path):
             model=ModelProviderConfig(provider="ollama", options={"model": "test-model"}),
             trace_path=tmp_path / "trace.jsonl",
             checkpoint_path=tmp_path / "checkpoints" / "langgraph.sqlite",
+            agent_store_path=tmp_path / "agent.sqlite",
+            skills_path=tmp_path / "skills",
+            skill_proposals_path=tmp_path / "skill_proposals",
+            mcp_config_path=tmp_path / "mcp_servers.json",
             show_progress=False,
         )
     )
@@ -27,6 +31,7 @@ def test_app_factory_builds_runtime_with_registered_tools(tmp_path):
     assert runtime.checkpointer is not None
     assert "ssh_kubectl_get" in tool_names
     assert "weather_forecast" in tool_names
-    assert len(runtime.close_callbacks) == 1
+    assert runtime.context_provider is not None
+    assert len(runtime.close_callbacks) == 2
     runtime.close()
     assert runtime.close_callbacks == []

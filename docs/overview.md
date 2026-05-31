@@ -14,6 +14,12 @@ The current implementation focuses on:
 - Approval interrupt and SQLite-backed resume in the CLI runtime.
 - Human-readable progress output.
 - Machine-readable JSONL trace output.
+- Local SQLite metadata for memory, skills, eval runs, and model profiles.
+- Explicit-write memory injection.
+- Authored markdown skills and generated skill proposals.
+- Evaluation replay from traces or scenario fixtures without live tool execution.
+- OpenAI-compatible model adapters and deterministic rule-based routing.
+- MCP client-side tool discovery for configured servers.
 - SSH-backed read-only Kubernetes inspection.
 - External read-only data tools such as weather forecast.
 
@@ -46,13 +52,30 @@ CLI input
 - SSH identity file paths are redacted in command traces.
 - CLI checkpoint files are stored under `data/checkpoints/` and are not intended for Git.
 - Local trace outputs are not intended for Git.
+- Evaluation replay defaults to recorded tool observations and does not execute live tools.
+- Memory writes are explicit CLI operations only.
+- MCP tools require approval by default unless marked read-only in configuration.
+
+## Local Storage
+
+The project uses SQLite for metadata and files for larger artifacts:
+
+- `data/agent.sqlite`: memory items, skill index, eval run metadata, and model profile metadata.
+- `data/checkpoints/langgraph.sqlite`: LangGraph checkpoint state for interrupt/resume.
+- `skills/*.md`: authored skills tracked with the project.
+- `data/skill_proposals/*.md`: generated skill proposals, local-only by default.
+- `evals/scenarios/*.json`: replay scenario fixtures tracked with the project.
+- `data/eval_runs/*.json`: generated replay reports, local-only by default.
+- `config/mcp_servers.json`: configured MCP clients.
+- `config/model_profiles.json`: model profiles and router rules.
 
 ## Current Non-Goals
 
 - Arbitrary SSH command execution.
 - Unreviewed execution of dangerous tools.
 - Production deployment packaging.
-- MCP / A2A integration.
-- Long-term memory policy.
-- Multi-model routing.
-- Self-evolving skill publication.
+- A2A integration.
+- Automatic long-term memory writes.
+- Vector search or embedding-backed memory retrieval.
+- Dynamic MCP server installation.
+- Self-evolving skill publication without review.
