@@ -5,6 +5,7 @@
 This review focuses on the active project path:
 
 - `mini_agent/main.py`
+- `mini_agent/app_factory.py`
 - `mini_agent/langgraph_runtime/`
 - shared harness modules under `mini_agent/`
 - active tests under `tests/`
@@ -34,16 +35,22 @@ This removes the main structural ambiguity in the project. Future work should ex
 Responsibilities:
 
 - parse CLI arguments
-- build runtime dependencies
 - start or resume a runtime
 - handle terminal approval prompts
 
-Current status: acceptable.
+Current status: focused on CLI behavior.
 
-Possible later cleanup:
+### `app_factory.py`
 
-- move runtime construction into `mini_agent/app_factory.py` if more adapters or runtime profiles are added
-- keep CLI parsing and terminal prompting in `main.py`
+Responsibilities:
+
+- build runtime dependencies
+- register tools
+- construct model adapters through `ModelProviderConfig`
+- wire permission, trace, progress, and checkpoint components
+- own factory-level paths such as `trace_path` and `checkpoint_path`
+
+Current status: active runtime assembly boundary.
 
 ### `mini_agent/langgraph_runtime/`
 
@@ -137,7 +144,7 @@ They intentionally avoid the `test_` filename prefix so default pytest does not 
 2. Keep active docs aligned with `mini_agent/langgraph_runtime/`.
 3. Keep archived runtime out of main test and CLI paths.
 4. Split `langgraph_runtime/nodes.py` only when new runtime capabilities make the file materially harder to maintain.
-5. Add durable checkpointing before any server/API or multi-process approval flow.
+5. Keep server/API work on explicit durable checkpoint injection rather than direct-constructor in-memory defaults.
 
 ## Do Not Do Yet
 

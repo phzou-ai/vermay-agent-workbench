@@ -1,4 +1,5 @@
 from mini_agent.model_clients.ollama import OllamaModelClient
+from mini_agent.types import Message
 
 
 def parse(content: str):
@@ -85,3 +86,12 @@ def test_parse_first_tool_call_when_model_returns_multiple_json_actions():
     assert response.tool_call is not None
     assert response.tool_call.name == "ssh_kubectl_get"
     assert response.tool_call.arguments == {"resource": "nodes", "namespace": "all"}
+
+
+def test_ollama_protocol_prompt_uses_standard_tool_message_error_language():
+    messages = [Message(role="user", content="hello")]
+    ollama_messages = OllamaModelClient()._to_ollama_messages(messages, tools=[])
+    protocol = ollama_messages[0]["content"]
+
+    assert "TOOL_ERROR" not in protocol
+    assert "tool message indicates an error or failed execution" in protocol

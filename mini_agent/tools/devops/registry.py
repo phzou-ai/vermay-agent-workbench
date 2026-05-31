@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from typing import Literal
-
 from mini_agent.tool_registry import ToolRegistry
 from mini_agent.tooling import ToolArgs, structured_tool
 from pydantic import Field
 
+from .constants import KubectlDescribeResource, KubectlGetResource, MockKubectlGetResource
 from .dangerous import delete_resource, exec_shell, kubectl_apply
 from .mock import grep_logs, kubectl_get, read_file
 from .remote_kubernetes import ssh_kubectl_describe, ssh_kubectl_get
@@ -20,20 +19,16 @@ class GrepLogsArgs(ToolArgs):
 
 
 class KubectlGetArgs(ToolArgs):
-    resource: Literal["pods", "services"] = Field(description="Mock Kubernetes resource type.")
+    resource: MockKubectlGetResource = Field(description="Mock Kubernetes resource type.")
 
 
 class SshKubectlGetArgs(ToolArgs):
-    resource: Literal["pods", "services", "deployments", "nodes", "namespaces", "events"] = Field(
-        description="Kubernetes resource type to read."
-    )
+    resource: KubectlGetResource = Field(description="Kubernetes resource type to read.")
     namespace: str = Field(default="all", description="Kubernetes namespace or 'all'.")
 
 
 class SshKubectlDescribeArgs(ToolArgs):
-    resource: Literal["pod", "service", "deployment", "node"] = Field(
-        description="Kubernetes resource type to describe."
-    )
+    resource: KubectlDescribeResource = Field(description="Kubernetes resource type to describe.")
     name: str = Field(description="Kubernetes resource name.")
     namespace: str = Field(default="default", description="Kubernetes namespace. Ignored for node.")
 

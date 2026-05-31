@@ -3,6 +3,12 @@ from pydantic import Field
 
 from mini_agent.tool_registry import ToolRegistry
 from mini_agent.tooling import ToolArgs, structured_tool
+from mini_agent.tools.devops import register_devops_tools
+from mini_agent.tools.devops.constants import (
+    KUBECTL_DESCRIBE_RESOURCES,
+    KUBECTL_GET_RESOURCES,
+    MOCK_KUBECTL_GET_RESOURCES,
+)
 
 
 class SampleArgs(ToolArgs):
@@ -57,3 +63,17 @@ def test_registry_unknown_tool_has_clear_error():
 
     with pytest.raises(KeyError, match="unknown tool: missing"):
         registry.get("missing")
+
+
+def test_devops_tool_schemas_use_single_source_resource_enums():
+    registry = ToolRegistry()
+    register_devops_tools(registry)
+    schemas = {schema["name"]: schema for schema in registry.schemas()}
+
+    mock_resource_schema = schemas["kubectl_get"]["parameters"]["$defs"]["MockKubectlGetResource"]
+    get_resource_schema = schemas["ssh_kubectl_get"]["parameters"]["$defs"]["KubectlGetResource"]
+    describe_resource_schema = schemas["ssh_kubectl_describe"]["parameters"]["$defs"]["KubectlDescribeResource"]
+
+    assert mock_resource_schema["enum"] == MOCK_KUBECTL_GET_RESOURCES
+    assert get_resource_schema["enum"] == KUBECTL_GET_RESOURCES
+    assert describe_resource_schema["enum"] == KUBECTL_DESCRIBE_RESOURCES

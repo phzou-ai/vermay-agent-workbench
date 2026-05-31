@@ -6,7 +6,7 @@ from typing import Any
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict
 
-from .tool_registry import DANGEROUS_METADATA_KEY
+from .tool_schema import DANGEROUS_METADATA_KEY
 
 
 class ToolArgs(BaseModel):

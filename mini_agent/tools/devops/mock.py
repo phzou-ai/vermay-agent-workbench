@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .constants import MockKubectlGetResource
+
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -21,9 +23,12 @@ def grep_logs(pattern: str) -> dict:
     return {"pattern": pattern, "matches": matches, "count": len(matches)}
 
 
-def kubectl_get(resource: str) -> dict:
+def kubectl_get(resource: str | MockKubectlGetResource) -> dict:
+    try:
+        resource_value = MockKubectlGetResource(resource).value
+    except ValueError as exc:
+        raise ValueError(f"unsupported mock resource: {resource}") from exc
     cluster = json.loads((ROOT / "data" / "cluster.json").read_text(encoding="utf-8"))
-    if resource not in cluster:
-        raise ValueError(f"unknown mock resource: {resource}")
-    return {resource: cluster[resource]}
-
+    if resource_value not in cluster:
+        raise ValueError(f"unknown mock resource: {resource_value}")
+    return {resource_value: cluster[resource_value]}

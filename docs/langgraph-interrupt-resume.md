@@ -12,14 +12,14 @@ The implementation is centered on:
 
 ## Runtime Entry
 
-The CLI builds the LangGraph runtime through `build_langgraph_runtime()` in `mini_agent/main.py`.
+The CLI parses terminal arguments in `mini_agent/main.py` and builds the LangGraph runtime through `build_runtime()` in `mini_agent/app_factory.py`.
 
 Default execution path:
 
 ```text
 mini-agent "<prompt>"
   -> main()
-  -> build_langgraph_runtime()
+  -> build_runtime()
   -> TTY: CLI run_langgraph_with_interactive_approval(...)
   -> non-TTY: LangGraphAgentRuntime.run()
 ```
@@ -29,13 +29,19 @@ Manual approval resume path:
 ```text
 mini-agent --thread-id <id> --resume-approval true
   -> main()
-  -> build_langgraph_runtime()
+  -> build_runtime()
   -> LangGraphAgentRuntime.resume(thread_id=<id>, approved=true)
 ```
 
-Current limitation:
+The CLI runtime factory injects a SQLite checkpointer at:
 
-The default runtime uses an in-memory checkpointer. Manual resume across separate CLI processes is therefore not durable for the default runtime yet. Interactive approval works because `start()` and `resume()` run in the same process against the same runtime instance.
+```text
+data/checkpoints/langgraph.sqlite
+```
+
+Direct `LangGraphAgentRuntime(...)` construction still falls back to LangGraph `InMemorySaver` when no checkpointer is provided. That keeps unit tests and embedded memory-only usage lightweight while making the CLI approval resume path durable.
+
+The CLI closes factory-owned resources through `runtime.close()` after the run finishes.
 
 ## Initial Run
 
@@ -218,11 +224,19 @@ max_approval_rounds=1
 
 If the resumed graph hits another approval interrupt, the wrapper stops after the configured approval round limit instead of repeatedly prompting in the same terminal session.
 
-When stdin is not a TTY, the CLI does not prompt. In that case `run()` returns the approval interrupt message. With the current in-memory checkpointer, resuming that interrupt requires the same runtime process. Cross-process CLI resume requires a durable checkpointer and is not supported yet.
+When stdin is not a TTY, the CLI does not prompt. In that case `run()` returns the approval interrupt message. Because the CLI factory uses SQLite checkpointing, the same `thread_id` can later be resumed from a fresh CLI process.
 
 ## Checkpoint Storage
 
-The default runtime currently uses LangGraph `InMemorySaver`. Its checkpoints are process-local.
+The CLI runtime stores LangGraph checkpoints in:
+
+```text
+data/checkpoints/langgraph.sqlite
+```
+
+This file is local runtime state and is ignored by Git.
+
+Direct `LangGraphAgentRuntime(...)` construction without a checkpointer still uses LangGraph `InMemorySaver`. Its checkpoints are process-local.
 
 The checkpoint contains graph state needed for resume. The terminal progress output and `RunResult.interrupt_message` are not the source of truth for resume.
 

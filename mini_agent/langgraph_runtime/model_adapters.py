@@ -4,8 +4,10 @@ from dataclasses import dataclass
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.tools import BaseTool
 
 from mini_agent.model_clients import OllamaModelClient
+from mini_agent.tool_schema import tool_schemas_from_tools
 from mini_agent.types import Message
 
 
@@ -19,18 +21,13 @@ class ModelInvocation:
 class OllamaModelAdapter:
     """Adapter from the project Ollama client to LangChain standard messages."""
 
-    def __init__(
-        self,
-        client: OllamaModelClient,
-        tool_schemas: list[dict],
-    ) -> None:
+    def __init__(self, client: OllamaModelClient) -> None:
         self.client = client
-        self.tool_schemas = tool_schemas
 
-    def invoke(self, messages: list[BaseMessage], tools: list) -> ModelInvocation:
+    def invoke(self, messages: list[BaseMessage], tools: list[BaseTool]) -> ModelInvocation:
         response = self.client.invoke(
             messages=[_to_project_message(message) for message in messages],
-            tools=self.tool_schemas,
+            tools=tool_schemas_from_tools(tools),
         )
         if response.tool_call is None:
             return ModelInvocation(message=AIMessage(content=response.content))

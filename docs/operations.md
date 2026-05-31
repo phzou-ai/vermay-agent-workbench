@@ -30,7 +30,7 @@ MINI_AGENT_OLLAMA_BASE_URL=http://127.0.0.1:11434
 MINI_AGENT_OLLAMA_TIMEOUT_SECONDS=120
 ```
 
-CLI override example:
+Provider-specific CLI override example:
 
 ```bash
 mini-agent "weather forecast for Shanghai" \
@@ -40,19 +40,55 @@ mini-agent "weather forecast for Shanghai" \
   --ollama-timeout-seconds 120
 ```
 
-Future model providers should be added through `mini_agent/langgraph_runtime/model_factory.py`.
+Advanced model provider options can be passed as repeated flat `key=value` pairs:
+
+```bash
+mini-agent "weather forecast for Shanghai" \
+  --model-provider ollama \
+  --model-option model=deepseek-v4-flash:cloud \
+  --model-option timeout_seconds=120
+```
+
+`--model-option` has higher priority than provider-specific flags. It is intended as a generic escape hatch for provider options; nested JSON values are not supported.
+
+`--ollama-*` flags are valid only with `--model-provider ollama`. Other providers should use `--model-option` until provider-specific flags are added for them.
+
+`timeout_seconds` must be a positive integer.
+
+The CLI maps provider flags and generic model options into `ModelProviderConfig(provider, options)`. Runtime assembly lives in `mini_agent/app_factory.py`; provider-specific model construction lives in `mini_agent/langgraph_runtime/model_factory.py`.
+
+## Trace Path
+
+`--trace` accepts a filename or relative subpath under `traces/`:
+
+```bash
+mini-agent "weather forecast for Shanghai" --trace runs/latest.jsonl
+```
+
+Absolute paths are allowed for debugging and tests. Relative paths cannot escape `traces/`.
 
 ## Approval Resume
 
 Dangerous tools require approval and pause the graph through LangGraph interrupt/resume.
 
-In an interactive terminal, the default command prompts for approval and resumes in the same process:
+In an interactive terminal, the default command prompts for approval and resumes automatically:
+
+```bash
+mini-agent "run a dangerous operation"
+```
+
+The CLI runtime stores LangGraph checkpoints in:
+
+```text
+data/checkpoints/langgraph.sqlite
+```
+
+This makes manual resume durable across CLI processes:
 
 ```bash
 mini-agent "run a dangerous operation" --thread-id approval-session
+mini-agent --thread-id approval-session --resume-approval true --approval-reason "approved by operator"
 ```
-
-The active runtime currently uses an in-memory checkpointer. Cross-process manual resume is therefore not durable yet. A durable checkpointer should be added before relying on resume across separate CLI processes, server workers, or restarts.
 
 Interactive approval asks at most once per run by default. If the model requests another dangerous tool after approval, the run stops instead of repeatedly prompting.
 

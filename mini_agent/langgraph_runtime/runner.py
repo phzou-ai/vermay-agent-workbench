@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from uuid import uuid4
 
@@ -27,6 +28,7 @@ class LangGraphAgentRuntime:
     checkpointer: object | None = None
     progress: ProgressReporter | None = None
     trace: TraceLogger | None = None
+    close_callbacks: list[Callable[[], None]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         components = GraphComponents(
@@ -40,6 +42,11 @@ class LangGraphAgentRuntime:
 
     def run(self, user_input: str, thread_id: str | None = None) -> str:
         return self.start(user_input, thread_id=thread_id).to_output()
+
+    def close(self) -> None:
+        while self.close_callbacks:
+            callback = self.close_callbacks.pop()
+            callback()
 
     def start(self, user_input: str, thread_id: str | None = None) -> RunResult:
         active_thread_id = thread_id or str(uuid4())

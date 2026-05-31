@@ -4,13 +4,15 @@ import shlex
 
 from mini_agent.infra.ssh import SshClient
 
-from .constants import KUBECTL_DESCRIBE_RESOURCES, KUBECTL_GET_RESOURCES
+from .constants import KubectlDescribeResource, KubectlGetResource
 
 
-def ssh_kubectl_get(resource: str, namespace: str = "all") -> dict:
-    if resource not in KUBECTL_GET_RESOURCES:
-        raise ValueError(f"unsupported resource: {resource}")
-    args = ["get", resource]
+def ssh_kubectl_get(resource: str | KubectlGetResource, namespace: str = "all") -> dict:
+    try:
+        resource_value = KubectlGetResource(resource).value
+    except ValueError as exc:
+        raise ValueError(f"unsupported resource: {resource}") from exc
+    args = ["get", resource_value]
     if namespace == "all":
         args.append("-A")
     else:
@@ -20,13 +22,15 @@ def ssh_kubectl_get(resource: str, namespace: str = "all") -> dict:
     return SshClient().run(command)
 
 
-def ssh_kubectl_describe(resource: str, name: str, namespace: str = "default") -> dict:
-    if resource not in KUBECTL_DESCRIBE_RESOURCES:
-        raise ValueError(f"unsupported resource: {resource}")
-    if resource == "node":
+def ssh_kubectl_describe(resource: str | KubectlDescribeResource, name: str, namespace: str = "default") -> dict:
+    try:
+        resource_value = KubectlDescribeResource(resource).value
+    except ValueError as exc:
+        raise ValueError(f"unsupported resource: {resource}") from exc
+    if resource_value == "node":
         args = ["describe", "node", name]
     else:
-        args = ["describe", resource, name, "-n", namespace]
+        args = ["describe", resource_value, name, "-n", namespace]
     command = remote_kubectl_command(args)
     return SshClient(timeout_seconds=30).run(command)
 
@@ -46,4 +50,3 @@ def remote_kubectl_command(args: list[str]) -> str:
         "exit 127; "
         "fi"
     )
-

@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-from copy import deepcopy
-from typing import Any
-
 from langchain_core.tools import BaseTool
 
-
-DANGEROUS_METADATA_KEY = "dangerous"
+from .tool_schema import DANGEROUS_METADATA_KEY, tool_schemas_from_tools
 
 
 class ToolRegistry:
@@ -25,15 +21,7 @@ class ToolRegistry:
             raise KeyError(f"unknown tool: {name}") from exc
 
     def schemas(self) -> list[dict]:
-        return [
-            {
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": _tool_parameters_schema(tool),
-                "dangerous": self.is_dangerous(tool.name),
-            }
-            for tool in self.tools()
-        ]
+        return tool_schemas_from_tools(self.tools())
 
     def names(self) -> list[str]:
         return sorted(self._tools)
@@ -44,17 +32,3 @@ class ToolRegistry:
     def is_dangerous(self, name: str) -> bool:
         tool = self.get(name)
         return bool((tool.metadata or {}).get(DANGEROUS_METADATA_KEY, False))
-
-
-def _tool_parameters_schema(tool: BaseTool) -> dict[str, Any]:
-    args_schema = getattr(tool, "args_schema", None)
-    if args_schema is not None:
-        if isinstance(args_schema, dict):
-            return deepcopy(args_schema)
-        if hasattr(args_schema, "model_json_schema"):
-            return args_schema.model_json_schema()
-
-    return {
-        "type": "object",
-        "properties": deepcopy(getattr(tool, "args", {}) or {}),
-    }

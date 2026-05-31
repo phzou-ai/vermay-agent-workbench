@@ -34,7 +34,11 @@ HTTP session id / conversation id / user task id
 
 The runtime does not store active session state. The caller must pass `thread_id` explicitly when continuing or resuming a run.
 
-The default runtime currently uses an in-memory LangGraph checkpointer. A future server/API layer must provide a durable checkpointer before relying on resume across process restarts or multiple workers.
+The CLI runtime factory uses a SQLite LangGraph checkpointer. Direct `LangGraphAgentRuntime(...)` construction still uses an in-memory checkpointer when no checkpointer is provided.
+
+A server/API layer should inject its own durable checkpointer explicitly rather than relying on the direct constructor fallback.
+
+When a runtime owns closeable resources, such as a SQLite checkpointer connection, the caller should call `runtime.close()` during worker shutdown or request-lifecycle cleanup.
 
 ## API Response Shape
 
@@ -85,6 +89,6 @@ runtime.resume(thread_id=thread_id, approved=True, reason="approved")
 
 - Do not add a web server before the API contract is stable.
 - Do not store active sessions on `LangGraphAgentRuntime`.
-- Do not rely on the default in-memory checkpointer for production resume.
+- Do not rely on direct-constructor in-memory checkpointing for production resume.
 - Do not expose raw graph state by default.
 - Do not treat `RunResult.interrupt_message` as the source of truth for resume. The source of truth remains `thread_id` plus the LangGraph checkpoint store.

@@ -31,12 +31,11 @@ Tool definitions use one source of truth:
 ```text
 Pydantic args_schema
   -> StructuredTool
-  -> ToolRegistry.schemas()
-  -> model-facing schema
+  -> model-facing schema per model call
   -> ToolNode execution validation
 ```
 
-Dangerous-tool metadata is stored on the `StructuredTool` metadata and read by `PermissionGate`. The active runtime does not maintain a separate `ToolSpec.parameters` schema.
+`ToolRegistry.schemas()` is an inspection helper over the same `StructuredTool` list, not a second schema source. Dangerous-tool metadata is stored on the `StructuredTool` metadata and read by `PermissionGate`. The active runtime does not maintain a separate `ToolSpec.parameters` schema.
 
 ## Install
 
@@ -60,7 +59,7 @@ By default, the CLI prints a compact harness progress transcript to stderr. The 
 
 The runtime calls models through a provider adapter boundary. Provider-specific request formats, authentication, timeouts, and response parsing stay outside graph orchestration.
 
-The active runtime builds model adapters through `mini_agent/langgraph_runtime/model_factory.py`. The current provider is `ollama`; later providers such as vLLM or OpenAI should be added there instead of being wired directly in `main.py`.
+The CLI builds the runtime through `mini_agent/app_factory.py`. Model adapters are built through `mini_agent/langgraph_runtime/model_factory.py`. The current provider is `ollama`; later providers such as vLLM or OpenAI should be added to the model factory instead of being wired directly in `main.py`.
 
 The Ollama-compatible client is implemented in `mini_agent/model_clients/ollama.py`. Its default configuration is read from `.env`, then overridden by `.env.local`, `.env.dev.local`, shell environment variables, and finally CLI flags.
 
@@ -79,6 +78,21 @@ mini-agent "weather forecast for Shanghai" \
   --ollama-base-url http://127.0.0.1:11434 \
   --ollama-timeout-seconds 120
 ```
+
+Generic provider options are also supported for advanced overrides:
+
+```bash
+mini-agent "weather forecast for Shanghai" \
+  --model-provider ollama \
+  --ollama-model qwen3.6:27b \
+  --model-option model=deepseek-v4-flash:cloud
+```
+
+`--model-option` accepts flat `key=value` pairs only. It can be repeated and has higher priority than provider-specific CLI flags.
+
+`--ollama-*` flags are valid only with `--model-provider ollama`. Other providers should use `--model-option` until provider-specific flags are added.
+
+`timeout_seconds` must be a positive integer. The `--trace` option accepts a filename or subpath under `traces/`; relative paths cannot escape that directory.
 
 Additional providers should implement the same model adapter boundary and return the project runtime's thin wrapper around `AIMessage`.
 

@@ -11,7 +11,7 @@ The current implementation focuses on:
 - Tool registration with LangGraph `ToolNode` execution.
 - Tool schemas defined once through Pydantic `args_schema` on `StructuredTool`.
 - Permission checks before dangerous operations.
-- Approval interrupt and resume.
+- Approval interrupt and SQLite-backed resume in the CLI runtime.
 - Human-readable progress output.
 - Machine-readable JSONL trace output.
 - SSH-backed read-only Kubernetes inspection.
@@ -44,7 +44,8 @@ CLI input
 - Dangerous tools are intercepted by `PermissionGate`.
 - Real cluster operations are limited to allowlisted read-only Kubernetes commands.
 - SSH identity file paths are redacted in command traces.
-- Checkpoint files and local trace outputs are not intended for Git.
+- CLI checkpoint files are stored under `data/checkpoints/` and are not intended for Git.
+- Local trace outputs are not intended for Git.
 
 ## Current Non-Goals
 

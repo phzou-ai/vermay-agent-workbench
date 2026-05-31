@@ -5,10 +5,21 @@
 `mini_agent/main.py`
 
 - Defines the `mini-agent` CLI.
-- Builds the active LangGraph runtime.
-- Wires model adapters, tools, trace logging, progress reporting, and approval handling.
+- Parses CLI arguments and maps them to runtime factory configuration.
+- Converts provider-specific flags and `--model-option key=value` into model provider options.
 - Handles approval resume CLI options.
 - Owns terminal-only interactive approval prompting.
+
+## Runtime Factory
+
+`mini_agent/app_factory.py`
+
+- Defines `RuntimeFactoryConfig`.
+- Builds the active LangGraph runtime through `build_runtime()`.
+- Wires model adapters, tools, permission checks, trace logging, progress reporting, and approval handling.
+- Injects the CLI SQLite checkpointer.
+- Registers runtime close callbacks for owned resources such as SQLite connections.
+- Owns factory-level paths such as `trace_path` and `checkpoint_path`.
 
 ## LangGraph Runtime
 
@@ -30,8 +41,10 @@ This package is the only active runtime path. It is the production-oriented path
 `mini_agent/`
 
 - `context_builder.py`: builds the default system prompt and remains the source for context policy text.
+- `checkpointing.py`: builds SQLite checkpointers for durable CLI approval resume.
 - `tooling.py`: helper for creating `StructuredTool` objects with Pydantic `args_schema` and project metadata.
-- `tool_registry.py`: stores `StructuredTool` objects and exposes model-facing schemas derived from each tool's `args_schema`.
+- `tool_schema.py`: converts active `StructuredTool` objects into model-facing schemas.
+- `tool_registry.py`: stores `StructuredTool` objects and exposes schema inspection over the same tool objects.
 - `permission.py`: blocks dangerous tools before execution.
 - `result_summary.py`: shared summary helpers for terminal progress output.
 - `trace.py`: writes JSONL runtime events.
@@ -39,7 +52,7 @@ This package is the only active runtime path. It is the production-oriented path
 - `memory.py`: minimal file-backed memory placeholder.
 - `types.py`: shared dataclasses for project message, tool-call, result, observation, and model-response payloads.
 
-The active tool schema source is each tool's Pydantic `args_schema`. `ToolRegistry.schemas()` derives the model-facing schema from the same `StructuredTool` objects that `ToolNode` executes.
+The active tool schema source is each tool's Pydantic `args_schema`. Model adapters and `ToolRegistry.schemas()` both derive schemas from the same `StructuredTool` objects that `ToolNode` executes.
 
 `tool_executor.py` and `observation.py` are retained for compatibility and explicit harness tests. They are not the active ToolNode execution path.
 
@@ -54,8 +67,10 @@ The active tool schema source is each tool's Pydantic `args_schema`. `ToolRegist
 `mini_agent/langgraph_runtime/model_factory.py`
 
 - Builds provider-specific model adapters for the active runtime.
+- Accepts `ModelProviderConfig(provider, options)`.
+- Validates provider-specific options.
 - Currently supports `ollama`.
-- Future providers such as vLLM or OpenAI should be added here instead of being wired directly into `main.py`.
+- Future providers such as vLLM or OpenAI should be added here instead of being wired directly into `main.py` or `app_factory.py`.
 
 ## Tool Domains
 

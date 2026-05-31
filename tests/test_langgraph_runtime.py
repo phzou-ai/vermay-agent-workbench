@@ -3,12 +3,13 @@ from __future__ import annotations
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from pydantic import Field
 
+from mini_agent.checkpointing import build_sqlite_checkpointer
 from mini_agent.model_clients import OllamaModelClient
 from mini_agent.permission import PermissionGate
 from mini_agent.progress import ProgressReporter
 from mini_agent.langgraph_runtime import ModelInvocation, OllamaModelAdapter
 from mini_agent.langgraph_runtime.graph import build_graph
-from mini_agent.langgraph_runtime.model_factory import ModelConfig, build_model_client
+from mini_agent.langgraph_runtime.model_factory import ModelProviderConfig, build_model_client
 from mini_agent.langgraph_runtime.nodes import GraphComponents
 from mini_agent.langgraph_runtime.routing import (
     latest_ai_message,
@@ -20,6 +21,7 @@ from mini_agent.langgraph_runtime.routing import (
 from mini_agent.langgraph_runtime.runner import LangGraphAgentRuntime
 from mini_agent.langgraph_runtime.state import build_initial_state
 from mini_agent.tooling import ToolArgs, structured_tool
+from mini_agent.tool_schema import tool_schemas_from_tools
 from mini_agent.tool_registry import ToolRegistry
 from mini_agent.trace import TraceLogger
 
@@ -165,6 +167,31 @@ def test_langgraph_runtime_run_returns_final_answer():
     assert runtime.run("hello") == "final answer"
 
 
+def test_langgraph_runtime_close_runs_callbacks_once():
+    calls = []
+    runtime = LangGraphAgentRuntime(
+        model=FakeModel(AIMessage(content="final answer")),
+        close_callbacks=[lambda: calls.append("closed")],
+    )
+
+    runtime.close()
+    runtime.close()
+
+    assert calls == ["closed"]
+    assert runtime.close_callbacks == []
+
+
+def test_langgraph_runtime_resume_requires_thread_id():
+    runtime = LangGraphAgentRuntime(model=FakeModel(AIMessage(content="final answer")))
+
+    try:
+        runtime.resume("", approved=True)
+    except ValueError as exc:
+        assert str(exc) == "thread_id is required to resume an approval interrupt"
+    else:
+        raise AssertionError("expected missing thread_id to fail")
+
+
 def test_langgraph_graph_executes_safe_tool_with_toolnode_then_calls_model_again():
     model = FakeModel(
         [
@@ -297,6 +324,53 @@ def test_langgraph_runtime_resumes_approved_dangerous_tool():
     assert result.state["approval"] == {"approved": True, "reason": "approved for test"}
 
 
+def test_langgraph_runtime_resumes_approval_from_sqlite_checkpoint_across_runtime_instances(tmp_path):
+    checkpoint_path = tmp_path / "langgraph.sqlite"
+    executed = {"value": False}
+    registry = ToolRegistry()
+    tool = make_dangerous_tool(executed)
+    registry.register(tool)
+    first_checkpointer = build_sqlite_checkpointer(checkpoint_path)
+    first_runtime = LangGraphAgentRuntime(
+        model=FakeModel(
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "dangerous",
+                        "args": {},
+                        "id": "call-dangerous",
+                        "type": "tool_call",
+                    }
+                ],
+            )
+        ),
+        tools=[tool],
+        permission_gate=PermissionGate(registry),
+        checkpointer=first_checkpointer,
+        close_callbacks=[first_checkpointer.conn.close],
+    )
+
+    interrupted = first_runtime.start("run dangerous", thread_id="durable-thread")
+    first_runtime.close()
+    second_checkpointer = build_sqlite_checkpointer(checkpoint_path)
+    second_runtime = LangGraphAgentRuntime(
+        model=FakeModel(AIMessage(content="dangerous completed")),
+        tools=[tool],
+        permission_gate=PermissionGate(registry),
+        checkpointer=second_checkpointer,
+        close_callbacks=[second_checkpointer.conn.close],
+    )
+
+    result = second_runtime.resume(interrupted.thread_id, approved=True, reason="approved from second runtime")
+
+    assert result.status == "completed"
+    assert result.final_answer == "dangerous completed"
+    assert executed["value"] is True
+    assert result.state["approval"] == {"approved": True, "reason": "approved from second runtime"}
+    second_runtime.close()
+
+
 def test_langgraph_runtime_resumes_rejected_dangerous_tool_without_execution():
     executed = {"value": False}
     registry = ToolRegistry()
@@ -412,21 +486,32 @@ def test_ollama_adapter_returns_thin_ai_message_wrapper():
             '{"action":"tool_call","name":"echo","arguments":{"value":"hello"}}'
         )
     )
-    adapter = OllamaModelAdapter(
-        client=project_client,
-        tool_schemas=[{"name": "echo", "parameters": {}}],
-    )
+    adapter = OllamaModelAdapter(client=project_client)
+    tool = make_echo_tool()
 
-    response = adapter.invoke([SystemMessage(content="system"), HumanMessage(content="hello")], tools=[])
+    response = adapter.invoke([SystemMessage(content="system"), HumanMessage(content="hello")], tools=[tool])
 
     assert isinstance(response, ModelInvocation)
     assert isinstance(response.message, AIMessage)
     assert response.message.tool_calls[0]["name"] == "echo"
     assert response.message.tool_calls[0]["args"] == {"value": "hello"}
-    assert project_client.calls[0][1] == [{"name": "echo", "parameters": {}}]
+    assert project_client.calls[0][1] == tool_schemas_from_tools([tool])
+
+
+def test_ollama_adapter_uses_tools_argument_for_each_invocation():
+    project_client = FakeProjectModelClient(OllamaModelClient()._parse_content('{"action":"final","content":"ok"}'))
+    adapter = OllamaModelAdapter(client=project_client)
+    echo_tool = make_echo_tool()
+    dangerous_tool = make_dangerous_tool({"value": False})
+
+    adapter.invoke([HumanMessage(content="first")], tools=[echo_tool])
+    adapter.invoke([HumanMessage(content="second")], tools=[dangerous_tool])
+
+    assert project_client.calls[0][1] == tool_schemas_from_tools([echo_tool])
+    assert project_client.calls[1][1] == tool_schemas_from_tools([dangerous_tool])
 
 
 def test_model_factory_builds_default_provider_adapter():
-    model = build_model_client(ModelConfig(provider="ollama"), tool_schemas=[])
+    model = build_model_client(ModelProviderConfig(provider="ollama"))
 
     assert isinstance(model, OllamaModelAdapter)
