@@ -14,6 +14,7 @@ class ReplayScenario:
     input: str
     source_type: str
     source_path: Path
+    replay_mode: str
     requested_tools: list[str] = field(default_factory=list)
     recorded_tools: list[str] = field(default_factory=list)
     final_answer: str | None = None
@@ -26,6 +27,9 @@ class ReplayReport:
     run_id: str
     source_type: str
     source_path: str
+    replay_mode: str
+    live_model: bool
+    live_tools: bool
     input: str
     model_profile: str
     status: str
@@ -41,6 +45,9 @@ class ReplayReport:
             "run_id": self.run_id,
             "source_type": self.source_type,
             "source_path": self.source_path,
+            "replay_mode": self.replay_mode,
+            "live_model": self.live_model,
+            "live_tools": self.live_tools,
             "input": self.input,
             "model_profile": self.model_profile,
             "status": self.status,
@@ -53,7 +60,7 @@ class ReplayReport:
         }
 
 
-class TraceReplayService:
+class OfflineReplayService:
     def __init__(self, *, store: AgentStore, report_dir: Path) -> None:
         self.store = store
         self.report_dir = report_dir
@@ -94,6 +101,9 @@ class TraceReplayService:
             run_id=run_id,
             source_type=scenario.source_type,
             source_path=str(scenario.source_path),
+            replay_mode=scenario.replay_mode,
+            live_model=False,
+            live_tools=False,
             input=scenario.input,
             model_profile=scenario.model_profile,
             status=status,
@@ -114,6 +124,9 @@ class TraceReplayService:
             input_text=scenario.input,
             report_path=report_path,
             summary={
+                "replay_mode": scenario.replay_mode,
+                "live_model": False,
+                "live_tools": False,
                 "tool_sequence_match": tool_sequence_match,
                 "final_answer_present": final_answer_present,
                 "errors": errors,
@@ -151,6 +164,7 @@ def load_trace_scenario(path: Path) -> ReplayScenario:
         input=input_text,
         source_type="trace",
         source_path=path,
+        replay_mode="offline_trace",
         requested_tools=requested,
         recorded_tools=recorded,
         final_answer=final_answer,
@@ -172,6 +186,7 @@ def load_json_scenario(path: Path) -> ReplayScenario:
         input=str(body.get("input") or ""),
         source_type="scenario",
         source_path=path,
+        replay_mode="offline_scenario",
         requested_tools=[str(item) for item in requested],
         recorded_tools=recorded,
         final_answer=body.get("final_answer") or expect.get("final_answer"),
@@ -194,3 +209,6 @@ def _read_jsonl(path: Path) -> list[dict]:
         if isinstance(event, dict):
             events.append(event)
     return events
+
+
+TraceReplayService = OfflineReplayService

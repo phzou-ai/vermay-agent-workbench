@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+SCHEMA_VERSION = 1
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -28,6 +30,11 @@ class AgentStore:
         with self._lock:
             self.conn.executescript(
                 """
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    applied_at TEXT NOT NULL
+                );
+
                 CREATE TABLE IF NOT EXISTS memory_items (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     content TEXT NOT NULL,
@@ -89,6 +96,10 @@ class AgentStore:
                 );
                 """
             )
+            self.conn.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+                (SCHEMA_VERSION, utc_now()),
+            )
             self.conn.commit()
 
     def execute(self, sql: str, values: Iterable[Any] = ()) -> sqlite3.Cursor:
@@ -100,6 +111,10 @@ class AgentStore:
     def query(self, sql: str, values: Iterable[Any] = ()) -> list[sqlite3.Row]:
         with self._lock:
             return list(self.conn.execute(sql, tuple(values)))
+
+    def schema_version(self) -> int:
+        rows = self.query("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations")
+        return int(rows[0]["version"])
 
     def upsert_skill_index(
         self,

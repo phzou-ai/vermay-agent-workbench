@@ -1,0 +1,173 @@
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+from typing import Callable
+
+from mini_agent.langgraph_runtime import LangGraphAgentRuntime, ModelProviderConfig
+
+from ..app_factory import ROOT, RuntimeFactoryConfig, build_runtime
+
+
+def run_prompt(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(description="Mini Agent Workbench")
+    parser.add_argument("prompt", nargs="*", help="User input")
+    parser.add_argument(
+        "--trace",
+        default="latest.jsonl",
+        help="Trace JSONL filename or path under traces/. Absolute paths are allowed.",
+    )
+    parser.add_argument("--model-provider", default="ollama", help="Model provider adapter to use")
+    parser.add_argument("--ollama-model", default=None, help="Override MINI_AGENT_OLLAMA_MODEL")
+    parser.add_argument("--ollama-base-url", default=None, help="Override MINI_AGENT_OLLAMA_BASE_URL")
+    parser.add_argument(
+        "--ollama-timeout-seconds",
+        type=int,
+        default=None,
+        help="Override MINI_AGENT_OLLAMA_TIMEOUT_SECONDS",
+    )
+    parser.add_argument(
+        "--model-option",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Advanced model provider option. Can be repeated. Overrides provider-specific flags.",
+    )
+    parser.add_argument("--max-steps", type=int, default=5, help="Maximum model calls per run")
+    parser.add_argument("--no-progress", action="store_true", help="Disable progress logs on stderr")
+    parser.add_argument("--thread-id", default=None, help="LangGraph checkpoint thread id")
+    parser.add_argument(
+        "--resume-approval",
+        choices=["true", "false"],
+        default=None,
+        help="Resume a LangGraph approval interrupt with approval true or false",
+    )
+    parser.add_argument("--approval-reason", default=None, help="Optional reason for approval resume")
+    args = parser.parse_args(argv)
+
+    user_input = " ".join(args.prompt).strip() or "check cluster status"
+    try:
+        model_config = _model_provider_config_from_args(args)
+        trace_path = _trace_path(args.trace)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+    runtime = build_runtime(
+        RuntimeFactoryConfig(
+            model=model_config,
+            trace_path=trace_path,
+            max_loops=args.max_steps,
+            show_progress=not args.no_progress,
+        )
+    )
+
+    try:
+        if args.resume_approval is not None:
+            if not args.thread_id:
+                raise SystemExit("--thread-id is required with --resume-approval")
+            approved = args.resume_approval == "true"
+            print(runtime.resume(thread_id=args.thread_id, approved=approved, reason=args.approval_reason).to_output())
+            return
+
+        if sys.stdin.isatty():
+            print(
+                run_langgraph_with_interactive_approval(
+                    runtime,
+                    user_input,
+                    _prompt_for_approval,
+                    thread_id=args.thread_id,
+                )
+            )
+            return
+
+        print(runtime.run(user_input, thread_id=args.thread_id))
+    finally:
+        runtime.close()
+
+
+def run_langgraph_with_interactive_approval(
+    runtime: LangGraphAgentRuntime,
+    user_input: str,
+    approval_provider: Callable[[str, str], tuple[bool, str | None]],
+    max_approval_rounds: int = 1,
+    thread_id: str | None = None,
+) -> str:
+    result = runtime.start(user_input, thread_id=thread_id)
+    approval_rounds = 0
+
+    while result.interrupt_message is not None:
+        approval_rounds += 1
+        if approval_rounds > max_approval_rounds:
+            message = f"Stopped after {max_approval_rounds} approval rounds."
+            if runtime.trace is not None:
+                runtime.trace.log_event("langgraph_approval_round_limit_reached", {"message": message})
+            return message
+
+        approved, reason = approval_provider(result.interrupt_message, result.thread_id)
+        result = runtime.resume(thread_id=result.thread_id, approved=approved, reason=reason)
+
+    return result.to_output()
+
+
+def _prompt_for_approval(message: str, thread_id: str) -> tuple[bool, str | None]:
+    for line in message.splitlines():
+        if not line.startswith("Resume with:"):
+            print(line)
+    while True:
+        try:
+            value = input(f"Approve tool execution for thread {thread_id}? [yes/no]: ").strip().lower()
+        except EOFError:
+            return False, "approval input unavailable"
+        if value in {"y", "yes"}:
+            return True, "approved interactively"
+        if value in {"n", "no"}:
+            return False, "rejected interactively"
+        print("Please enter yes or no.")
+
+
+def _model_provider_config_from_args(args: argparse.Namespace) -> ModelProviderConfig:
+    options: dict[str, object] = {}
+    has_ollama_flags = any(
+        value is not None
+        for value in (
+            args.ollama_model,
+            args.ollama_base_url,
+            args.ollama_timeout_seconds,
+        )
+    )
+    if args.model_provider != "ollama" and has_ollama_flags:
+        raise ValueError("ollama-specific CLI flags require --model-provider ollama")
+    if args.model_provider == "ollama":
+        if args.ollama_model is not None:
+            options["model"] = args.ollama_model
+        if args.ollama_base_url is not None:
+            options["base_url"] = args.ollama_base_url
+        if args.ollama_timeout_seconds is not None:
+            options["timeout_seconds"] = args.ollama_timeout_seconds
+    options.update(_parse_model_options(args.model_option))
+    return ModelProviderConfig(provider=args.model_provider, options=options)
+
+
+def _parse_model_options(values: list[str]) -> dict[str, str]:
+    options: dict[str, str] = {}
+    for value in values:
+        if "=" not in value:
+            raise ValueError(f"invalid --model-option '{value}'; expected KEY=VALUE")
+        key, option_value = value.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise ValueError(f"invalid --model-option '{value}'; key cannot be empty")
+        options[key] = option_value
+    return options
+
+
+def _trace_path(value: str) -> Path:
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    trace_root = ROOT / "traces"
+    target = (trace_root / path).resolve()
+    if trace_root.resolve() not in target.parents and target != trace_root.resolve():
+        raise ValueError("--trace relative path must stay under traces/")
+    return target

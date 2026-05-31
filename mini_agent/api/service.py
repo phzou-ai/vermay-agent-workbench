@@ -53,7 +53,7 @@ class AgentService:
                 user_input=user_input,
                 result=result,
                 model=_model_payload(active_options.model),
-                max_loops=active_options.max_loops or self.default_config.max_loops,
+                max_loops=active_options.max_loops,
             )
             return result
         finally:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -34,6 +35,7 @@ class ApprovalResumeRequest(BaseModel):
 def create_app(service: AgentService | None = None) -> FastAPI:
     owned_store = None
     owned_service = service
+    owns_service = owned_service is None
     if owned_service is None:
         owned_store = AgentStore(DEFAULT_AGENT_STORE_PATH)
         owned_service = AgentService(
@@ -46,7 +48,8 @@ def create_app(service: AgentService | None = None) -> FastAPI:
         try:
             yield
         finally:
-            owned_service.close()
+            if owns_service:
+                owned_service.close()
             if owned_store is not None:
                 owned_store.close()
 
@@ -59,14 +62,19 @@ def create_app(service: AgentService | None = None) -> FastAPI:
 
     @app.post("/sessions")
     def start_session(request: SessionStartRequest) -> dict[str, Any]:
-        result = app.state.agent_service.start(
-            request.input,
-            thread_id=request.thread_id,
-            options=AgentStartOptions(
-                model=_model_config(request.model),
-                max_loops=request.max_loops,
-            ),
-        )
+        try:
+            result = app.state.agent_service.start(
+                request.input,
+                thread_id=request.thread_id,
+                options=AgentStartOptions(
+                    model=_model_config(request.model),
+                    max_loops=request.max_loops,
+                ),
+            )
+        except (FileNotFoundError, json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="agent runtime error") from exc
         return result.to_dict()
 
     @app.get("/sessions/{thread_id}")
@@ -86,6 +94,10 @@ def create_app(service: AgentService | None = None) -> FastAPI:
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="session not found") from exc
+        except (FileNotFoundError, json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="agent runtime error") from exc
         return result.to_dict()
 
     return app
