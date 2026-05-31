@@ -25,7 +25,7 @@ from .storage import AgentStore
 
 
 def main() -> None:
-    if len(sys.argv) > 1 and sys.argv[1] in {"memory", "skills", "eval", "mcp"}:
+    if len(sys.argv) > 1 and sys.argv[1] in {"serve", "memory", "skills", "eval", "mcp"}:
         _run_subcommand(sys.argv[1:])
         return
 
@@ -209,7 +209,26 @@ def _run_subcommand(argv: list[str]) -> None:
     if command == "mcp":
         _run_mcp_command(argv[1:])
         return
+    if command == "serve":
+        _run_serve_command(argv[1:])
+        return
     raise SystemExit(f"unknown command: {command}")
+
+
+def _run_serve_command(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(prog="mini-agent serve")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8000)
+    args = parser.parse_args(argv)
+
+    import uvicorn
+
+    uvicorn.run(
+        "mini_agent.api.app:create_app",
+        factory=True,
+        host=args.host,
+        port=args.port,
+    )
 
 
 def _run_memory_command(argv: list[str]) -> None:

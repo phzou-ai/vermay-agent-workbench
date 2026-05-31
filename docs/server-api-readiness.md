@@ -1,48 +1,94 @@
-# Server/API Readiness
+# Server/API
 
-## Scope
+## Current API Surface
 
-This document records the runtime boundary needed before adding a server or API layer.
+The project includes a local FastAPI server for agent lifecycle operations.
 
-No HTTP server is implemented in the current project. The active goal is to keep `LangGraphAgentRuntime` usable as a shared engine while external layers own session identity and UI state.
+Start the server:
+
+```bash
+mini-agent serve
+```
+
+Default bind address:
+
+```text
+127.0.0.1:8000
+```
+
+Endpoints:
+
+```text
+GET  /health
+POST /sessions
+GET  /sessions/{thread_id}
+POST /sessions/{thread_id}/resume
+```
+
+The first API batch is local-only and does not add authentication. Do not expose it beyond a trusted local environment without adding an access-control layer.
+
+## Start Session
+
+`POST /sessions`
+
+Request:
+
+```json
+{
+  "input": "check k8s status",
+  "thread_id": "optional-client-session-id",
+  "max_loops": 5,
+  "model": {
+    "provider": "ollama",
+    "options": {
+      "model": "deepseek-v4-flash:cloud"
+    }
+  }
+}
+```
+
+Only `input` is required. When omitted, `thread_id`, `max_loops`, and `model` use runtime defaults.
 
 ## Runtime Contract
 
-The runtime exposes structured methods:
+The API uses the structured runtime methods:
 
 ```python
 start(user_input, thread_id=None) -> RunResult
 resume(thread_id, approved, reason=None) -> RunResult
 ```
 
-Compatibility methods remain available for CLI string output:
-
-```python
-run(...) -> str
-```
-
-Server or API code should use `start(...)` and `resume(...)`, not the string compatibility methods.
+Compatibility methods that return strings remain available for CLI use, but API code should use `RunResult` payloads.
 
 ## Session Mapping
 
-An API layer should map external session identifiers to LangGraph thread ids:
+The API uses `thread_id` as the external session identifier.
 
 ```text
-HTTP session id / conversation id / user task id
+HTTP session id
   -> LangGraph thread_id
+  -> SQLite checkpoint state
 ```
 
-The runtime does not store active session state. The caller must pass `thread_id` explicitly when continuing or resuming a run.
+Session metadata is persisted in `data/agent.sqlite`. LangGraph checkpoint state is persisted in `data/checkpoints/langgraph.sqlite`.
 
-The CLI runtime factory uses a SQLite LangGraph checkpointer. Direct `LangGraphAgentRuntime(...)` construction still uses an in-memory checkpointer when no checkpointer is provided.
+Stored session metadata includes:
 
-A server/API layer should inject its own durable checkpointer explicitly rather than relying on the direct constructor fallback.
+- `thread_id`
+- `input`
+- `status`
+- `final_answer`
+- `interrupt`
+- `interrupt_message`
+- `stop_message`
+- `created_at`
+- `updated_at`
 
-When a runtime owns closeable resources, such as a SQLite checkpointer connection, the caller should call `runtime.close()` during worker shutdown or request-lifecycle cleanup.
+Raw graph state is not stored or returned by default.
 
-## API Response Shape
+## Response Shape
 
-`RunResult.to_dict()` provides a stable API-facing payload:
+`POST /sessions` and `POST /sessions/{thread_id}/resume` return `RunResult.to_dict()`:
 
 ```json
 {
@@ -55,6 +101,22 @@ When a runtime owns closeable resources, such as a SQLite checkpointer connectio
 }
 ```
 
+`GET /sessions/{thread_id}` returns stored metadata:
+
+```json
+{
+  "thread_id": "session-a",
+  "status": "interrupted",
+  "input": "run a dangerous operation",
+  "final_answer": null,
+  "interrupt": {},
+  "interrupt_message": "Approval required...",
+  "stop_message": null,
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
 Status values:
 
 ```text
@@ -64,31 +126,30 @@ stopped
 unknown
 ```
 
-The full graph state is excluded by default. Call `to_dict(include_state=True)` only for trusted debugging paths, not public API responses.
+## Approval Resume
 
-## Approval State
+When a dangerous tool triggers an interrupt, the API stores the interrupt metadata and returns `status: interrupted`.
 
-Approval prompts are UI/session state. A server should store pending approval metadata outside the runtime:
+Resume by calling:
 
-```text
-session store:
-  session_id
-  thread_id
-  pending interrupt message
-  pending interrupt payload
-  created_at / expires_at
+```http
+POST /sessions/{thread_id}/resume
 ```
 
-Resume should call:
+Request:
 
-```python
-runtime.resume(thread_id=thread_id, approved=True, reason="approved")
+```json
+{
+  "approved": true,
+  "reason": "approved by operator"
+}
 ```
 
-## Non-Goals
+The source of truth for resume is the `thread_id` plus the LangGraph checkpoint store. The user-facing `interrupt_message` is metadata for clients, not the checkpoint itself.
 
-- Do not add a web server before the API contract is stable.
-- Do not store active sessions on `LangGraphAgentRuntime`.
-- Do not rely on direct-constructor in-memory checkpointing for production resume.
-- Do not expose raw graph state by default.
-- Do not treat `RunResult.interrupt_message` as the source of truth for resume. The source of truth remains `thread_id` plus the LangGraph checkpoint store.
+## Current Boundaries
+
+- No server-side streaming.
+- No HTTP endpoints for memory, skills, eval replay, or MCP.
+- No authentication in the local default server.
+- No raw graph state exposure by default.

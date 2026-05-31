@@ -4,7 +4,7 @@
 
 This directory contains stable project-facing documentation for Mini Agent Workbench.
 
-The project is positioned as an agent validation and practice workbench. It provides a concrete runtime for testing agent orchestration, tool execution, approval control, memory, skills, evaluation replay, model routing, MCP client integration, and real-world tool patterns.
+The project is positioned as an agent validation and practice workbench. It provides a concrete runtime for testing agent orchestration, tool execution, approval control, memory, skills, evaluation replay, model routing, MCP client integration, local API integration, and real-world tool patterns.
 
 ## Reading Order
 
@@ -12,7 +12,7 @@ The project is positioned as an agent validation and practice workbench. It prov
 2. [modules.md](modules.md) - key packages and module responsibilities.
 3. [operations.md](operations.md) - CLI usage, runtime options, environment configuration, and traces.
 4. [langgraph-interrupt-resume.md](langgraph-interrupt-resume.md) - approval interrupt, checkpoint, and resume flow.
-5. [server-api-readiness.md](server-api-readiness.md) - runtime boundary for future server/API integration.
+5. [server-api-readiness.md](server-api-readiness.md) - local API surface, session metadata, and approval resume contract.
 6. [code-organization-review.md](code-organization-review.md) - current code organization assessment and cleanup order.
 
 ## Documentation Boundary

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,69 +19,87 @@ class AgentStore:
 
     def __post_init__(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(self.path)
+        self._lock = threading.RLock()
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.setup()
 
     def setup(self) -> None:
-        self.conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS memory_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                content TEXT NOT NULL,
-                tags TEXT NOT NULL DEFAULT '[]',
-                enabled INTEGER NOT NULL DEFAULT 1,
-                source TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
+        with self._lock:
+            self.conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS memory_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content TEXT NOT NULL,
+                    tags TEXT NOT NULL DEFAULT '[]',
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    source TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
 
-            CREATE TABLE IF NOT EXISTS skill_index (
-                name TEXT PRIMARY KEY,
-                path TEXT NOT NULL,
-                description TEXT,
-                triggers TEXT NOT NULL DEFAULT '[]',
-                version TEXT,
-                updated_at TEXT NOT NULL
-            );
+                CREATE TABLE IF NOT EXISTS skill_index (
+                    name TEXT PRIMARY KEY,
+                    path TEXT NOT NULL,
+                    description TEXT,
+                    triggers TEXT NOT NULL DEFAULT '[]',
+                    version TEXT,
+                    updated_at TEXT NOT NULL
+                );
 
-            CREATE TABLE IF NOT EXISTS eval_runs (
-                id TEXT PRIMARY KEY,
-                source_type TEXT NOT NULL,
-                source_path TEXT NOT NULL,
-                status TEXT NOT NULL,
-                input TEXT,
-                report_path TEXT NOT NULL,
-                summary TEXT,
-                created_at TEXT NOT NULL
-            );
+                CREATE TABLE IF NOT EXISTS eval_runs (
+                    id TEXT PRIMARY KEY,
+                    source_type TEXT NOT NULL,
+                    source_path TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    input TEXT,
+                    report_path TEXT NOT NULL,
+                    summary TEXT,
+                    created_at TEXT NOT NULL
+                );
 
-            CREATE TABLE IF NOT EXISTS eval_results (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                run_id TEXT NOT NULL,
-                name TEXT NOT NULL,
-                passed INTEGER NOT NULL,
-                details TEXT NOT NULL DEFAULT '{}',
-                FOREIGN KEY(run_id) REFERENCES eval_runs(id)
-            );
+                CREATE TABLE IF NOT EXISTS eval_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    passed INTEGER NOT NULL,
+                    details TEXT NOT NULL DEFAULT '{}',
+                    FOREIGN KEY(run_id) REFERENCES eval_runs(id)
+                );
 
-            CREATE TABLE IF NOT EXISTS model_profiles (
-                name TEXT PRIMARY KEY,
-                provider TEXT NOT NULL,
-                options TEXT NOT NULL DEFAULT '{}',
-                updated_at TEXT NOT NULL
-            );
-            """
-        )
-        self.conn.commit()
+                CREATE TABLE IF NOT EXISTS model_profiles (
+                    name TEXT PRIMARY KEY,
+                    provider TEXT NOT NULL,
+                    options TEXT NOT NULL DEFAULT '{}',
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS sessions (
+                    thread_id TEXT PRIMARY KEY,
+                    input TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    final_answer TEXT,
+                    interrupt TEXT,
+                    interrupt_message TEXT,
+                    stop_message TEXT,
+                    model TEXT,
+                    max_loops INTEGER,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            self.conn.commit()
 
     def execute(self, sql: str, values: Iterable[Any] = ()) -> sqlite3.Cursor:
-        cursor = self.conn.execute(sql, tuple(values))
-        self.conn.commit()
-        return cursor
+        with self._lock:
+            cursor = self.conn.execute(sql, tuple(values))
+            self.conn.commit()
+            return cursor
 
     def query(self, sql: str, values: Iterable[Any] = ()) -> list[sqlite3.Row]:
-        return list(self.conn.execute(sql, tuple(values)))
+        with self._lock:
+            return list(self.conn.execute(sql, tuple(values)))
 
     def upsert_skill_index(
         self,
@@ -151,4 +170,5 @@ class AgentStore:
         return [dict(row) for row in rows]
 
     def close(self) -> None:
-        self.conn.close()
+        with self._lock:
+            self.conn.close()

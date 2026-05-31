@@ -18,6 +18,37 @@ mini-agent "weather forecast for Shanghai"
 
 The CLI uses `mini_agent/langgraph_runtime/`. No alternate runtime is exposed through the active CLI.
 
+## API Server
+
+Start the local FastAPI server:
+
+```bash
+mini-agent serve
+```
+
+Default bind address:
+
+```text
+127.0.0.1:8000
+```
+
+Use a different port:
+
+```bash
+mini-agent serve --host 127.0.0.1 --port 9000
+```
+
+Available endpoints:
+
+```text
+GET  /health
+POST /sessions
+GET  /sessions/{thread_id}
+POST /sessions/{thread_id}/resume
+```
+
+The server is local-only by default and has no authentication. Keep the default bind address unless an access-control layer is added.
+
 ## Local Storage
 
 Runtime metadata and generated artifacts are local by default:

@@ -8,8 +8,18 @@
 - Parses CLI arguments and maps them to runtime factory configuration.
 - Converts provider-specific flags and `--model-option key=value` into model provider options.
 - Handles approval resume CLI options.
-- Dispatches non-runtime subcommands for memory, skills, eval replay, and MCP inspection.
+- Dispatches subcommands for `serve`, memory, skills, eval replay, and MCP inspection.
 - Owns terminal-only interactive approval prompting.
+
+## API
+
+`mini_agent/api/`
+
+- `app.py`: FastAPI app factory and HTTP route definitions.
+- `service.py`: service boundary for starting sessions, resuming approval, and reading session metadata.
+- `session_store.py`: SQLite-backed API session metadata.
+
+The API layer uses `LangGraphAgentRuntime.start()` and `resume()`. It does not call CLI string-output helpers and does not expose raw graph state by default.
 
 ## Runtime Factory
 

@@ -15,6 +15,7 @@ The default runtime uses LangGraph with LangChain standard message and tool type
 - Trace and scenario replay for evaluation.
 - Ollama, OpenAI-compatible, and rule-based model routing adapters.
 - MCP client tool discovery from local configuration.
+- Local FastAPI server for agent session lifecycle.
 
 ## Install
 
@@ -39,6 +40,57 @@ Disable progress output:
 ```bash
 mini-agent "weather forecast for Shanghai" --no-progress
 ```
+
+## API Server
+
+Start the local API server:
+
+```bash
+mini-agent serve
+```
+
+Defaults:
+
+```text
+host: 127.0.0.1
+port: 8000
+```
+
+Override host or port:
+
+```bash
+mini-agent serve --host 127.0.0.1 --port 9000
+```
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+Start a session:
+
+```bash
+curl -X POST http://127.0.0.1:8000/sessions \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"weather forecast for Shanghai"}'
+```
+
+Inspect a session:
+
+```bash
+curl http://127.0.0.1:8000/sessions/<thread-id>
+```
+
+Resume an approval interrupt:
+
+```bash
+curl -X POST http://127.0.0.1:8000/sessions/<thread-id>/resume \
+  -H 'Content-Type: application/json' \
+  -d '{"approved":true,"reason":"approved by operator"}'
+```
+
+The API is local-only by default and does not add authentication. Bind it carefully if exposing it outside the local machine.
 
 ## Model Configuration
 

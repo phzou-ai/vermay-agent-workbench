@@ -117,3 +117,39 @@ def test_trace_path_preserves_absolute_values(tmp_path):
     path = tmp_path / "custom.jsonl"
 
     assert _trace_path(str(path)) == Path(path)
+
+
+def test_serve_command_runs_uvicorn_with_local_defaults(monkeypatch):
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr("uvicorn.run", fake_run)
+
+    from mini_agent.main import _run_serve_command
+
+    _run_serve_command([])
+
+    assert calls == [
+        (
+            ("mini_agent.api.app:create_app",),
+            {"factory": True, "host": "127.0.0.1", "port": 8000},
+        )
+    ]
+
+
+def test_serve_command_accepts_host_and_port(monkeypatch):
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr("uvicorn.run", fake_run)
+
+    from mini_agent.main import _run_serve_command
+
+    _run_serve_command(["--host", "0.0.0.0", "--port", "9000"])
+
+    assert calls[0][1]["host"] == "0.0.0.0"
+    assert calls[0][1]["port"] == 9000

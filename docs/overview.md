@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Mini Agent Workbench is a Python agent runtime for validating agent system behavior in realistic command-line workflows.
+Mini Agent Workbench is a Python agent runtime for validating agent system behavior in realistic command-line and local API workflows.
 
 The current implementation focuses on:
 
@@ -20,6 +20,7 @@ The current implementation focuses on:
 - Evaluation replay from traces or scenario fixtures without live tool execution.
 - OpenAI-compatible model adapters and deterministic rule-based routing.
 - MCP client-side tool discovery for configured servers.
+- Local FastAPI server for agent session lifecycle.
 - SSH-backed read-only Kubernetes inspection.
 - External read-only data tools such as weather forecast.
 
@@ -50,7 +51,8 @@ CLI input
 - Dangerous tools are intercepted by `PermissionGate`.
 - Real cluster operations are limited to allowlisted read-only Kubernetes commands.
 - SSH identity file paths are redacted in command traces.
-- CLI checkpoint files are stored under `data/checkpoints/` and are not intended for Git.
+- LangGraph checkpoint files are stored under `data/checkpoints/` and are not intended for Git.
+- API session metadata is stored in `data/agent.sqlite`.
 - Local trace outputs are not intended for Git.
 - Evaluation replay defaults to recorded tool observations and does not execute live tools.
 - Memory writes are explicit CLI operations only.
@@ -60,7 +62,7 @@ CLI input
 
 The project uses SQLite for metadata and files for larger artifacts:
 
-- `data/agent.sqlite`: memory items, skill index, eval run metadata, and model profile metadata.
+- `data/agent.sqlite`: memory items, skill index, eval run metadata, model profile metadata, and API session metadata.
 - `data/checkpoints/langgraph.sqlite`: LangGraph checkpoint state for interrupt/resume.
 - `skills/*.md`: authored skills tracked with the project.
 - `data/skill_proposals/*.md`: generated skill proposals, local-only by default.
@@ -74,6 +76,7 @@ The project uses SQLite for metadata and files for larger artifacts:
 - Arbitrary SSH command execution.
 - Unreviewed execution of dangerous tools.
 - Production deployment packaging.
+- Public unauthenticated API exposure.
 - A2A integration.
 - Automatic long-term memory writes.
 - Vector search or embedding-backed memory retrieval.
