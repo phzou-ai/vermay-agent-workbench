@@ -8,6 +8,7 @@ from mini_agent.langgraph_runtime import LangGraphAgentRuntime, ModelProviderCon
 from .checkpointing import build_sqlite_checkpointer
 from .context_builder import ContextBuilder
 from .mcp_client import MCPToolLoader
+from .mcp_prompts import MCPPromptProvider
 from .mcp_resources import MCPResourceProvider
 from .memory import SQLiteMemoryStore
 from .permission import PermissionGate
@@ -42,6 +43,7 @@ class RuntimeFactoryConfig:
     skill_proposals_path: Path = DEFAULT_SKILL_PROPOSALS_PATH
     mcp_config_path: Path = DEFAULT_MCP_CONFIG_PATH
     mcp_servers: tuple[str, ...] = field(default_factory=tuple)
+    mcp_prompts: tuple[str, ...] = field(default_factory=tuple)
     mcp_resources: tuple[str, ...] = field(default_factory=tuple)
 
 
@@ -59,6 +61,15 @@ def build_runtime(config: RuntimeFactoryConfig | None = None) -> LangGraphAgentR
         progress.event(None, "mcp_selection", **payload)
     for tool in mcp_tools:
         registry.register(tool)
+    mcp_prompt_provider = None
+    if active_config.mcp_prompts:
+        mcp_prompt_provider = MCPPromptProvider(
+            config_path=active_config.mcp_config_path,
+            selected_servers=active_config.mcp_servers,
+            selected_prompts=active_config.mcp_prompts,
+            trace=trace,
+            progress=progress,
+        )
     mcp_resource_provider = None
     if active_config.mcp_resources:
         mcp_resource_provider = MCPResourceProvider(
@@ -87,8 +98,9 @@ def build_runtime(config: RuntimeFactoryConfig | None = None) -> LangGraphAgentR
         checkpointer=checkpointer,
         progress=progress,
         context_provider=RuntimeContextProvider(
-            memory=memory_store,
+            mcp_prompts=mcp_prompt_provider,
             skills=skill_store,
+            memory=memory_store,
             mcp_resources=mcp_resource_provider,
         ),
         close_callbacks=[checkpointer.conn.close, agent_store.close],

@@ -77,6 +77,7 @@ class MCPToolLoader:
         resource_discovery: Callable[[MCPServerConfig], list[MCPResourceDefinition]] | None = None,
         prompt_discovery: Callable[[MCPServerConfig], list[MCPPromptDefinition]] | None = None,
         resource_reader: Callable[[MCPServerConfig, str], str] | None = None,
+        prompt_getter: Callable[[MCPServerConfig, str, dict[str, str] | None], str] | None = None,
         caller: Callable[[MCPServerConfig, str, dict[str, Any]], Any] | None = None,
     ) -> None:
         self.config_path = config_path
@@ -85,6 +86,7 @@ class MCPToolLoader:
         self.resource_discovery = resource_discovery
         self.prompt_discovery = prompt_discovery
         self.resource_reader = resource_reader
+        self.prompt_getter = prompt_getter
         self.caller = caller
 
     def load_tools(self) -> list[StructuredTool]:
@@ -141,6 +143,13 @@ class MCPToolLoader:
         if self.resource_reader is not None:
             return self.resource_reader(server, uri)
         return asyncio.run(_read_stdio_resource(server, uri))
+
+    def get_prompt(self, server_name: str, prompt_name: str, arguments: dict[str, str] | None = None) -> str:
+        servers = self._server_configs_for_discovery(server_name)
+        server = servers[0]
+        if self.prompt_getter is not None:
+            return self.prompt_getter(server, prompt_name, arguments)
+        return asyncio.run(_get_stdio_prompt(server, prompt_name, arguments))
 
     def _selected_server_configs(self) -> list[MCPServerConfig]:
         if self.selected_servers is None:
@@ -362,6 +371,23 @@ async def _read_stdio_resource(server: MCPServerConfig, uri: str) -> str:
             return _serialize_resource_result(result)
 
 
+async def _get_stdio_prompt(server: MCPServerConfig, prompt_name: str, arguments: dict[str, str] | None = None) -> str:
+    if not server.command:
+        raise ValueError(f"MCP server '{server.name}' requires command")
+    try:
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+    except ImportError as exc:
+        raise RuntimeError("MCP SDK is not installed. Install the 'mcp' Python package.") from exc
+
+    params = StdioServerParameters(command=server.command, args=server.args, env=server.env or None)
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.get_prompt(prompt_name, arguments)
+            return _serialize_prompt_result(result)
+
+
 def _serialize_mcp_result(result: Any) -> Any:
     content = getattr(result, "content", None)
     if isinstance(content, list):
@@ -391,6 +417,26 @@ def _serialize_resource_result(result: Any) -> str:
         mime_type = getattr(item, "mimeType", "")
         serialized.append(f"[binary MCP resource omitted: uri={uri} mime_type={mime_type}]")
     return "\n".join(serialized)
+
+
+def _serialize_prompt_result(result: Any) -> str:
+    sections = []
+    description = getattr(result, "description", None)
+    if description:
+        sections.append(f"description: {description}")
+
+    messages = getattr(result, "messages", None)
+    if isinstance(messages, list):
+        for message in messages:
+            role = str(getattr(message, "role", "unknown"))
+            content = getattr(message, "content", None)
+            text = getattr(content, "text", None)
+            if text is not None:
+                sections.append(f"{role}:\n{text}")
+            else:
+                content_type = getattr(content, "type", type(content).__name__)
+                sections.append(f"{role}:\n[non-text MCP prompt content omitted: type={content_type}]")
+    return "\n\n".join(sections) if sections else str(result)
 
 
 def _serialize_prompt_arguments(arguments: Any) -> list[dict[str, Any]]:

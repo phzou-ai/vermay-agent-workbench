@@ -48,6 +48,12 @@ def run_prompt(argv: list[str]) -> None:
         default=[],
         help="Read and inject a selected MCP resource for this run. Can be repeated.",
     )
+    parser.add_argument(
+        "--mcp-prompt",
+        action="append",
+        default=[],
+        help="Read and inject selected MCP prompt guidance for this run. Can be repeated.",
+    )
     parser.add_argument("--thread-id", default=None, help="LangGraph checkpoint thread id")
     parser.add_argument(
         "--resume-approval",
@@ -73,6 +79,7 @@ def run_prompt(argv: list[str]) -> None:
                 max_loops=args.max_steps,
                 show_progress=not args.no_progress,
                 mcp_servers=tuple(args.mcp_server),
+                mcp_prompts=tuple(args.mcp_prompt),
                 mcp_resources=tuple(args.mcp_resource),
             )
         )

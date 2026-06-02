@@ -74,9 +74,11 @@ This package is the only active runtime path. It is the production-oriented path
 - `storage.py`: local SQLite metadata store with schema version marker.
 - `memory.py`: SQLite-backed explicit-write memory.
 - `skills.py`: authored skill parser, retrieval, proposal generation, and approval.
-- `runtime_context.py`: injects selected memory and skills as initial system context.
+- `runtime_context.py`: injects selected MCP prompts, authored skills, memory, and selected MCP resources as initial system context.
 - `evaluation.py`: offline trace/scenario replay reporting without live model or live tool execution.
 - `mcp_client.py`: configured MCP client discovery and `StructuredTool` wrapping.
+- `mcp_prompts.py`: selected MCP prompt retrieval, truncation, and context injection.
+- `mcp_resources.py`: selected MCP resource retrieval, truncation, and context injection.
 - `types.py`: shared dataclasses for project message, tool-call, result, observation, and model-response payloads.
 
 The active tool schema source is each tool's Pydantic `args_schema`. Model adapters and `ToolRegistry.schemas()` both derive schemas from the same `StructuredTool` objects that `ToolNode` executes.
@@ -113,7 +115,9 @@ The active tool schema source is each tool's Pydantic `args_schema`. Model adapt
 
 - `weather_forecast` read-only external data tool backed by `wttr.in`.
 
-Configured MCP servers are inactive by default. Runtime construction loads MCP tools only from explicitly selected servers, such as `--mcp-server k8s`. Eligible discovered MCP tools are wrapped as `StructuredTool` objects with namespaced model-facing names and registered through the same `ToolRegistry` path as built-in tools. Explicitly selected MCP resources are read once at run start and injected through `RuntimeContextProvider` as bounded external context.
+Configured MCP servers are inactive by default. Runtime construction loads MCP tools only from explicitly selected servers, such as `--mcp-server k8s`. Eligible discovered MCP tools are wrapped as `StructuredTool` objects with namespaced model-facing names and registered through the same `ToolRegistry` path as built-in tools.
+
+Explicitly selected MCP prompts and resources are read once at run start. `RuntimeContextProvider` injects them in this order: MCP prompts, local authored skills, explicit memory, MCP resources. Prompts are treated as external workflow guidance; resources are treated as untrusted external data.
 
 ## Infrastructure
 

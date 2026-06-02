@@ -55,6 +55,23 @@ def test_app_factory_rejects_mcp_resource_without_selected_server(tmp_path):
         )
 
 
+def test_app_factory_rejects_mcp_prompt_without_selected_server(tmp_path):
+    with pytest.raises(ValueError, match="requires at least one --mcp-server"):
+        build_runtime(
+            RuntimeFactoryConfig(
+                model=ModelProviderConfig(provider="ollama", options={"model": "test-model"}),
+                trace_path=tmp_path / "trace.jsonl",
+                checkpoint_path=tmp_path / "checkpoints" / "langgraph.sqlite",
+                agent_store_path=tmp_path / "agent.sqlite",
+                skills_path=tmp_path / "skills",
+                skill_proposals_path=tmp_path / "skill_proposals",
+                mcp_config_path=tmp_path / "mcp_servers.json",
+                mcp_prompts=("debug",),
+                show_progress=False,
+            )
+        )
+
+
 def test_app_factory_passes_selected_mcp_servers_and_logs_zero_eligible_tools(tmp_path, monkeypatch):
     captured_servers = []
 

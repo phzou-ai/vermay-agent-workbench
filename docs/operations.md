@@ -177,15 +177,16 @@ mini-agent mcp list-resources --server k8s
 mini-agent mcp list-prompts --server k8s
 ```
 
-Configured MCP servers are inactive during normal agent runs until selected with `--mcp-server`. MCP tools are approval-required by default. A server or individual tool must be explicitly marked read-only in config to bypass approval. MCP prompts can currently be listed for inspection; prompt injection is handled in a later batch.
+Configured MCP servers are inactive during normal agent runs until selected with `--mcp-server`. MCP tools are approval-required by default. A server or individual tool must be explicitly marked read-only in config to bypass approval.
 
-Selected MCP resources can be injected as bounded external context:
+Selected MCP prompts and resources can be injected as bounded context:
 
 ```bash
+mini-agent "debug service health" --mcp-server k8s --mcp-prompt service-health-check
 mini-agent "check service status" --mcp-server k8s --mcp-resource k8s://cluster/services
 ```
 
-Resources are read once at run start. When multiple MCP servers are selected, use the qualified form `server:uri`, for example `--mcp-resource k8s:k8s://cluster/services`. MCP prompt injection is still deferred.
+Prompts and resources are read once at run start. Prompts are injected as external workflow guidance before local skills, memory, and resources. Resources are injected as external data after local memory. When multiple MCP servers are selected, use qualified forms such as `--mcp-prompt k8s:service-health-check` and `--mcp-resource k8s:k8s://cluster/services`.
 
 ## Trace Path
 
