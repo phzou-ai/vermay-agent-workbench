@@ -19,6 +19,7 @@ class SessionRecord:
     stop_message: str | None
     model: dict[str, Any] | None
     max_loops: int | None
+    mcp: dict[str, Any] | None
     created_at: str
     updated_at: str
 
@@ -31,6 +32,7 @@ class SessionRecord:
             "interrupt": self.interrupt,
             "interrupt_message": self.interrupt_message,
             "stop_message": self.stop_message,
+            "mcp": self.mcp,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -47,6 +49,7 @@ class SessionStore:
         result: RunResult,
         model: dict[str, Any] | None,
         max_loops: int | None,
+        mcp: dict[str, Any] | None = None,
     ) -> SessionRecord:
         payload = result.to_dict()
         existing = self.get(result.thread_id)
@@ -56,9 +59,9 @@ class SessionStore:
             """
             INSERT INTO sessions(
                 thread_id, input, status, final_answer, interrupt, interrupt_message, stop_message,
-                model, max_loops, created_at, updated_at
+                model, max_loops, mcp, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(thread_id) DO UPDATE SET
                 input=excluded.input,
                 status=excluded.status,
@@ -68,6 +71,7 @@ class SessionStore:
                 stop_message=excluded.stop_message,
                 model=excluded.model,
                 max_loops=excluded.max_loops,
+                mcp=excluded.mcp,
                 updated_at=excluded.updated_at
             """,
             (
@@ -80,6 +84,7 @@ class SessionStore:
                 result.stop_message,
                 _dumps(model),
                 max_loops,
+                _dumps(mcp),
                 created_at,
                 now,
             ),
@@ -93,7 +98,7 @@ class SessionStore:
         rows = self.store.query(
             """
             SELECT thread_id, input, status, final_answer, interrupt, interrupt_message, stop_message,
-                   model, max_loops, created_at, updated_at
+                   model, max_loops, mcp, created_at, updated_at
             FROM sessions
             WHERE thread_id=?
             """,
@@ -112,6 +117,7 @@ class SessionStore:
             stop_message=row["stop_message"],
             model=_loads(row["model"]),
             max_loops=row["max_loops"],
+            mcp=_loads(row["mcp"]),
             created_at=str(row["created_at"]),
             updated_at=str(row["updated_at"]),
         )

@@ -47,6 +47,21 @@ GET  /sessions/{thread_id}
 POST /sessions/{thread_id}/resume
 ```
 
+`POST /sessions` accepts optional structured MCP selection:
+
+```json
+{
+  "input": "debug service health",
+  "mcp": {
+    "servers": ["k8s"],
+    "prompts": [{"server": "k8s", "name": "service-health-check"}],
+    "resources": [{"server": "k8s", "uri": "k8s://cluster/services"}]
+  }
+}
+```
+
+API MCP prompt and resource selections must name a server listed in `mcp.servers`. The selected MCP configuration is stored as session metadata and reused on approval resume.
+
 The server is local-only by default and has no authentication. Keep the default bind address unless an access-control layer is added.
 
 ## Local Storage

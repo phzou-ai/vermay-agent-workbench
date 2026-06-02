@@ -91,16 +91,23 @@ class AgentStore:
                     stop_message TEXT,
                     model TEXT,
                     max_loops INTEGER,
+                    mcp TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
                 """
             )
+            self._ensure_column("sessions", "mcp", "TEXT")
             self.conn.execute(
                 "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
                 (SCHEMA_VERSION, utc_now()),
             )
             self.conn.commit()
+
+    def _ensure_column(self, table: str, column: str, declaration: str) -> None:
+        columns = {row["name"] for row in self.conn.execute(f"PRAGMA table_info({table})")}
+        if column not in columns:
+            self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
 
     def execute(self, sql: str, values: Iterable[Any] = ()) -> sqlite3.Cursor:
         with self._lock:

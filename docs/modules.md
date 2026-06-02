@@ -28,9 +28,9 @@
 
 - `app.py`: FastAPI app factory and HTTP route definitions.
 - `service.py`: service boundary for starting sessions, resuming approval, and reading session metadata.
-- `session_store.py`: SQLite-backed API session metadata.
+- `session_store.py`: SQLite-backed API session metadata, including selected MCP session configuration.
 
-The API layer uses `LangGraphAgentRuntime.start()` and `resume()`. It does not call CLI string-output helpers and does not expose raw graph state by default.
+The API layer uses `LangGraphAgentRuntime.start()` and `resume()`. It accepts structured MCP session selection, stores that selection in `sessions.mcp`, and reuses it on approval resume. It does not call CLI string-output helpers and does not expose raw graph state by default.
 
 ## Runtime Factory
 
@@ -77,6 +77,7 @@ This package is the only active runtime path. It is the production-oriented path
 - `runtime_context.py`: injects selected MCP prompts, authored skills, memory, and selected MCP resources as initial system context.
 - `evaluation.py`: offline trace/scenario replay reporting without live model or live tool execution.
 - `mcp_client.py`: configured MCP client discovery and `StructuredTool` wrapping.
+- `mcp_selection.py`: structured MCP selection model used by the API service and runtime factory wiring.
 - `mcp_prompts.py`: selected MCP prompt retrieval, truncation, and context injection.
 - `mcp_resources.py`: selected MCP resource retrieval, truncation, and context injection.
 - `types.py`: shared dataclasses for project message, tool-call, result, observation, and model-response payloads.

@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from mini_agent.api.app import create_app
 from mini_agent.api.service import AgentService
 from mini_agent.api.session_store import SessionStore
+from mini_agent.app_factory import RuntimeFactoryConfig
 from mini_agent.langgraph_runtime.results import RunResult
 from mini_agent.storage import AgentStore
 
@@ -92,6 +93,67 @@ def test_api_start_completed_session_and_get_metadata(tmp_path):
     assert metadata.status_code == 200
     assert metadata.json()["input"] == "hello"
     assert metadata.json()["status"] == "completed"
+    service.close()
+    store.close()
+
+
+def test_api_start_accepts_mcp_selection_and_persists_metadata(tmp_path):
+    store = AgentStore(tmp_path / "agent.sqlite")
+    runtime = FakeRuntime([RunResult(thread_id="mcp-thread", final_answer="done")])
+    built_configs: list[RuntimeFactoryConfig] = []
+
+    def build(config):
+        built_configs.append(config)
+        return runtime
+
+    service = AgentService(session_store=SessionStore(store), runtime_builder=build)
+    client = TestClient(create_app(service=service))
+
+    response = client.post(
+        "/sessions",
+        json={
+            "input": "debug service",
+            "thread_id": "mcp-thread",
+            "mcp": {
+                "servers": ["k8s"],
+                "prompts": [{"server": "k8s", "name": "k8s-debug"}],
+                "resources": [{"server": "k8s", "uri": "k8s://cluster/default/services"}],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert built_configs[-1].mcp_servers == ("k8s",)
+    assert built_configs[-1].mcp_prompts == ("k8s:k8s-debug",)
+    assert built_configs[-1].mcp_resources == ("k8s:k8s://cluster/default/services",)
+
+    metadata = client.get("/sessions/mcp-thread")
+    assert metadata.status_code == 200
+    assert metadata.json()["mcp"] == {
+        "servers": ["k8s"],
+        "prompts": [{"server": "k8s", "name": "k8s-debug"}],
+        "resources": [{"server": "k8s", "uri": "k8s://cluster/default/services"}],
+    }
+    service.close()
+    store.close()
+
+
+def test_api_mcp_prompt_must_reference_selected_server(tmp_path):
+    client, store, service = make_client(tmp_path, FakeRuntime([RunResult(thread_id="unused", final_answer="ok")]))
+
+    response = client.post(
+        "/sessions",
+        json={
+            "input": "debug service",
+            "mcp": {
+                "servers": ["docs"],
+                "prompts": [{"server": "k8s", "name": "k8s-debug"}],
+            },
+        },
+    )
+
+    assert response.status_code == 400
+    assert "unselected server" in response.json()["detail"]
     service.close()
     store.close()
 

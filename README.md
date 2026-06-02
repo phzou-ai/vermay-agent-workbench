@@ -76,6 +76,21 @@ curl -X POST http://127.0.0.1:8000/sessions \
   -d '{"input":"weather forecast for Shanghai"}'
 ```
 
+Start a session with explicit MCP selection:
+
+```bash
+curl -X POST http://127.0.0.1:8000/sessions \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "input": "debug service health",
+    "mcp": {
+      "servers": ["k8s"],
+      "prompts": [{"server": "k8s", "name": "service-health-check"}],
+      "resources": [{"server": "k8s", "uri": "k8s://cluster/services"}]
+    }
+  }'
+```
+
 Inspect a session:
 
 ```bash
@@ -91,6 +106,8 @@ curl -X POST http://127.0.0.1:8000/sessions/<thread-id>/resume \
 ```
 
 The API is local-only by default and does not add authentication. Bind it carefully if exposing it outside the local machine.
+
+API MCP selection uses structured objects and is stored as session metadata. Approval resume reuses the same selected MCP servers, prompts, and resources.
 
 ## Model Configuration
 

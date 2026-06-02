@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from mini_agent.app_factory import DEFAULT_AGENT_STORE_PATH, RuntimeFactoryConfig
 from mini_agent.langgraph_runtime import ModelProviderConfig
+from mini_agent.mcp_selection import MCPSelectionConfig
 from mini_agent.storage import AgentStore
 
 from .service import AgentService, AgentStartOptions
@@ -20,11 +21,28 @@ class ModelConfigRequest(BaseModel):
     options: dict[str, Any] = Field(default_factory=dict)
 
 
+class MCPPromptSelectionRequest(BaseModel):
+    server: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+
+
+class MCPResourceSelectionRequest(BaseModel):
+    server: str = Field(min_length=1)
+    uri: str = Field(min_length=1)
+
+
+class MCPSessionRequest(BaseModel):
+    servers: list[str] = Field(default_factory=list)
+    prompts: list[MCPPromptSelectionRequest] = Field(default_factory=list)
+    resources: list[MCPResourceSelectionRequest] = Field(default_factory=list)
+
+
 class SessionStartRequest(BaseModel):
     input: str = Field(min_length=1)
     thread_id: str | None = None
     max_loops: int | None = Field(default=None, gt=0)
     model: ModelConfigRequest | None = None
+    mcp: MCPSessionRequest | None = None
 
 
 class ApprovalResumeRequest(BaseModel):
@@ -69,6 +87,7 @@ def create_app(service: AgentService | None = None) -> FastAPI:
                 options=AgentStartOptions(
                     model=_model_config(request.model),
                     max_loops=request.max_loops,
+                    mcp=_mcp_config(request.mcp),
                 ),
             )
         except (FileNotFoundError, json.JSONDecodeError, ValueError) as exc:
@@ -107,3 +126,10 @@ def _model_config(request: ModelConfigRequest | None) -> ModelProviderConfig | N
     if request is None:
         return None
     return ModelProviderConfig(provider=request.provider, options=request.options)
+
+
+def _mcp_config(request: MCPSessionRequest | None) -> MCPSelectionConfig | None:
+    if request is None:
+        return None
+    payload = request.model_dump() if hasattr(request, "model_dump") else request.dict()
+    return MCPSelectionConfig.from_payload(payload)

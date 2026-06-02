@@ -12,6 +12,9 @@ def test_agent_store_creates_expected_tables(tmp_path):
     assert "skill_index" in names
     assert "eval_runs" in names
     assert "model_profiles" in names
+    assert "sessions" in names
+    session_columns = {row["name"] for row in store.query("PRAGMA table_info(sessions)")}
+    assert "mcp" in session_columns
     assert "schema_migrations" in names
     assert store.schema_version() == 1
     store.close()

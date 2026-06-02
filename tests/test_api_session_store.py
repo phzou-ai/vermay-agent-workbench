@@ -14,6 +14,11 @@ def test_session_store_persists_run_result_across_reopening(tmp_path):
         result=RunResult(thread_id="session-1", final_answer="done", state={"raw": "not persisted"}),
         model={"provider": "ollama", "options": {"model": "test"}},
         max_loops=3,
+        mcp={
+            "servers": ["k8s"],
+            "prompts": [{"server": "k8s", "name": "k8s-debug"}],
+            "resources": [{"server": "k8s", "uri": "k8s://cluster/default/services"}],
+        },
     )
     store.close()
 
@@ -26,6 +31,11 @@ def test_session_store_persists_run_result_across_reopening(tmp_path):
     assert record.final_answer == "done"
     assert record.model == {"provider": "ollama", "options": {"model": "test"}}
     assert record.max_loops == 3
+    assert record.mcp == {
+        "servers": ["k8s"],
+        "prompts": [{"server": "k8s", "name": "k8s-debug"}],
+        "resources": [{"server": "k8s", "uri": "k8s://cluster/default/services"}],
+    }
     assert "state" not in record.to_dict()
     reopened.close()
 
