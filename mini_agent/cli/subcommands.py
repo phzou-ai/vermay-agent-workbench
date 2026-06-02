@@ -154,10 +154,22 @@ def run_mcp_command(argv: list[str]) -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
     list_parser = subparsers.add_parser("list-tools")
     list_parser.add_argument("--config", default=str(DEFAULT_MCP_CONFIG_PATH))
+    list_parser.add_argument("--server", default=None, help="Configured MCP server name to inspect")
     args = parser.parse_args(argv)
 
     if args.command == "list-tools":
-        tools = MCPToolLoader(Path(args.config)).load_tools()
-        for tool in tools:
-            dangerous = bool((tool.metadata or {}).get("dangerous", False))
-            print(f"{tool.name}\tdangerous={dangerous}\t{tool.description}")
+        reports = MCPToolLoader(Path(args.config)).list_tool_reports(server_name=args.server)
+        for report in reports:
+            print(
+                "\t".join(
+                    [
+                        f"server={report.server}",
+                        f"original_name={report.original_name}",
+                        f"model_facing_name={report.model_facing_name}",
+                        f"read_only={report.read_only}",
+                        f"exposed_by_policy={report.exposed_by_policy}",
+                        f"requires_approval={report.requires_approval}",
+                        f"description={report.description}",
+                    ]
+                )
+            )

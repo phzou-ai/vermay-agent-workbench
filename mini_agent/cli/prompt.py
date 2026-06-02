@@ -36,6 +36,12 @@ def run_prompt(argv: list[str]) -> None:
     )
     parser.add_argument("--max-steps", type=int, default=5, help="Maximum model calls per run")
     parser.add_argument("--no-progress", action="store_true", help="Disable progress logs on stderr")
+    parser.add_argument(
+        "--mcp-server",
+        action="append",
+        default=[],
+        help="Select a configured MCP server for this run. Can be repeated.",
+    )
     parser.add_argument("--thread-id", default=None, help="LangGraph checkpoint thread id")
     parser.add_argument(
         "--resume-approval",
@@ -59,6 +65,7 @@ def run_prompt(argv: list[str]) -> None:
             trace_path=trace_path,
             max_loops=args.max_steps,
             show_progress=not args.no_progress,
+            mcp_servers=tuple(args.mcp_server),
         )
     )
 

@@ -5,11 +5,14 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable
 
 from langchain_core.tools import StructuredTool
 
 from .tool_schema import DANGEROUS_METADATA_KEY
+
+
+TOOL_EXPOSURE_POLICIES = {"none", "read_only", "allowlist", "all"}
 
 
 @dataclass(frozen=True)
@@ -22,6 +25,7 @@ class MCPServerConfig:
     read_only: bool = False
     read_only_tools: set[str] = field(default_factory=set)
     tool_overrides: dict[str, dict[str, Any]] = field(default_factory=dict)
+    tool_exposure: str = "read_only"
 
 
 @dataclass(frozen=True)
@@ -32,25 +36,83 @@ class MCPToolDefinition:
     server: MCPServerConfig
 
 
+@dataclass(frozen=True)
+class MCPToolReport:
+    server: str
+    original_name: str
+    model_facing_name: str
+    description: str
+    read_only: bool
+    exposed_by_policy: bool
+    requires_approval: bool
+
+
 class MCPToolLoader:
     def __init__(
         self,
         config_path: Path,
         *,
+        selected_servers: Iterable[str] | None = None,
         discovery: Callable[[MCPServerConfig], list[MCPToolDefinition]] | None = None,
         caller: Callable[[MCPServerConfig, str, dict[str, Any]], Any] | None = None,
     ) -> None:
         self.config_path = config_path
+        self.selected_servers = tuple(selected_servers) if selected_servers is not None else None
         self.discovery = discovery
         self.caller = caller
 
     def load_tools(self) -> list[StructuredTool]:
         tools = []
-        for server in load_mcp_server_configs(self.config_path):
+        seen_model_names: set[str] = set()
+        for server in self._selected_server_configs():
             definitions = self._discover(server)
             for definition in definitions:
-                tools.append(self._to_structured_tool(definition))
+                if not _is_exposed_by_policy(server, definition.name):
+                    continue
+                tool = self._to_structured_tool(definition)
+                if tool.name in seen_model_names:
+                    raise ValueError(f"MCP tool name collision after canonicalization: {tool.name}")
+                seen_model_names.add(tool.name)
+                tools.append(tool)
         return tools
+
+    def list_tool_reports(self, server_name: str | None = None) -> list[MCPToolReport]:
+        reports: list[MCPToolReport] = []
+        for server in self._server_configs_for_discovery(server_name):
+            for definition in self._discover(server):
+                read_only = _is_read_only(server, definition.name)
+                reports.append(
+                    MCPToolReport(
+                        server=server.name,
+                        original_name=definition.name,
+                        model_facing_name=_model_facing_tool_name(server.name, definition.name),
+                        description=definition.description,
+                        read_only=read_only,
+                        exposed_by_policy=_is_exposed_by_policy(server, definition.name),
+                        requires_approval=not read_only,
+                    )
+                )
+        return reports
+
+    def _selected_server_configs(self) -> list[MCPServerConfig]:
+        if self.selected_servers is None:
+            return load_mcp_server_configs(self.config_path)
+        configs = load_mcp_server_configs(self.config_path)
+        by_name = {config.name: config for config in configs}
+        selected = _dedupe(self.selected_servers)
+        unknown = [name for name in selected if name not in by_name]
+        if unknown:
+            raise ValueError(f"unknown selected MCP server(s): {', '.join(unknown)}")
+        return [by_name[name] for name in selected]
+
+    def _server_configs_for_discovery(self, server_name: str | None) -> list[MCPServerConfig]:
+        configs = load_mcp_server_configs(self.config_path)
+        if server_name is None:
+            return configs
+        for server in configs:
+            if server.name == server_name:
+                return [server]
+        raise ValueError(f"unknown MCP server: {server_name}")
 
     def _discover(self, server: MCPServerConfig) -> list[MCPToolDefinition]:
         if self.discovery is not None:
@@ -58,8 +120,9 @@ class MCPToolLoader:
         return asyncio.run(_discover_stdio_tools(server))
 
     def _to_structured_tool(self, definition: MCPToolDefinition) -> StructuredTool:
-        tool_name = f"mcp_{_safe_name(definition.server.name)}_{_safe_name(definition.name)}"
-        dangerous = not _is_read_only(definition.server, definition.name)
+        tool_name = _model_facing_tool_name(definition.server.name, definition.name)
+        read_only = _is_read_only(definition.server, definition.name)
+        dangerous = not read_only
 
         def call_tool(**kwargs):
             if self.caller is not None:
@@ -73,8 +136,11 @@ class MCPToolLoader:
             func=call_tool,
             metadata={
                 DANGEROUS_METADATA_KEY: dangerous,
+                "source": "mcp",
                 "mcp_server": definition.server.name,
                 "mcp_tool": definition.name,
+                "mcp_model_facing_name": tool_name,
+                "mcp_read_only": read_only,
             },
         )
 
@@ -97,6 +163,12 @@ def load_mcp_server_configs(path: Path) -> list[MCPServerConfig]:
         env = raw.get("env") or {}
         read_only_tools = raw.get("read_only_tools") or []
         tool_overrides = raw.get("tools") or {}
+        tool_exposure = str(raw.get("tool_exposure") or "read_only")
+        if tool_exposure not in TOOL_EXPOSURE_POLICIES:
+            raise ValueError(
+                f"MCP server '{name}' has unsupported tool_exposure '{tool_exposure}'. "
+                f"Expected one of: {', '.join(sorted(TOOL_EXPOSURE_POLICIES))}"
+            )
         configs.append(
             MCPServerConfig(
                 name=str(name),
@@ -107,6 +179,7 @@ def load_mcp_server_configs(path: Path) -> list[MCPServerConfig]:
                 read_only=bool(raw.get("read_only", False)),
                 read_only_tools={str(item) for item in read_only_tools},
                 tool_overrides=tool_overrides if isinstance(tool_overrides, dict) else {},
+                tool_exposure=tool_exposure,
             )
         )
     return configs
@@ -171,12 +244,44 @@ def _serialize_mcp_result(result: Any) -> Any:
 
 
 def _is_read_only(server: MCPServerConfig, tool_name: str) -> bool:
+    if server.read_only:
+        return True
     override = server.tool_overrides.get(tool_name)
     if isinstance(override, dict) and override.get("read_only") is True:
         return True
-    return server.read_only or tool_name in server.read_only_tools
+    return tool_name in server.read_only_tools
 
 
-def _safe_name(value: str) -> str:
-    name = re.sub(r"[^a-zA-Z0-9_]+", "_", value).strip("_").lower()
-    return name or "tool"
+def _is_exposed_by_policy(server: MCPServerConfig, tool_name: str) -> bool:
+    if server.tool_exposure == "none":
+        return False
+    if server.tool_exposure == "all":
+        return True
+    if server.tool_exposure == "read_only":
+        return _is_read_only(server, tool_name)
+    if server.tool_exposure == "allowlist":
+        return tool_name in server.tool_overrides
+    raise ValueError(f"unsupported MCP tool_exposure: {server.tool_exposure}")
+
+
+def _model_facing_tool_name(server_name: str, tool_name: str) -> str:
+    return f"mcp__{_canonical_name(server_name, 'server')}__{_canonical_name(tool_name, 'tool')}"
+
+
+def _canonical_name(value: str, label: str) -> str:
+    name = re.sub(r"[^a-z0-9_]+", "_", value.lower())
+    name = re.sub(r"_+", "_", name).strip("_")
+    if not name:
+        raise ValueError(f"MCP {label} name is empty after canonicalization: {value!r}")
+    return name
+
+
+def _dedupe(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result

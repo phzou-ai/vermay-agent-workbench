@@ -40,6 +40,7 @@ class RuntimeFactoryConfig:
     skills_path: Path = DEFAULT_SKILLS_PATH
     skill_proposals_path: Path = DEFAULT_SKILL_PROPOSALS_PATH
     mcp_config_path: Path = DEFAULT_MCP_CONFIG_PATH
+    mcp_servers: tuple[str, ...] = field(default_factory=tuple)
 
 
 def build_runtime(config: RuntimeFactoryConfig | None = None) -> LangGraphAgentRuntime:
@@ -47,7 +48,14 @@ def build_runtime(config: RuntimeFactoryConfig | None = None) -> LangGraphAgentR
     registry = ToolRegistry()
     register_devops_tools(registry)
     register_weather_tools(registry)
-    for tool in MCPToolLoader(active_config.mcp_config_path).load_tools():
+    progress = ProgressReporter(enabled=active_config.show_progress)
+    trace = TraceLogger(active_config.trace_path)
+    mcp_tools = MCPToolLoader(active_config.mcp_config_path, selected_servers=active_config.mcp_servers).load_tools()
+    if active_config.mcp_servers and not mcp_tools:
+        payload = {"servers": list(active_config.mcp_servers), "eligible_tools": 0}
+        trace.log_event("mcp_selection_no_eligible_tools", payload)
+        progress.event(None, "mcp_selection", **payload)
+    for tool in mcp_tools:
         registry.register(tool)
     checkpointer = build_sqlite_checkpointer(active_config.checkpoint_path)
     agent_store = AgentStore(active_config.agent_store_path)
@@ -63,10 +71,10 @@ def build_runtime(config: RuntimeFactoryConfig | None = None) -> LangGraphAgentR
         tools=registry.tools(),
         permission_gate=PermissionGate(registry),
         system_prompt=_default_system_prompt(),
-        trace=TraceLogger(active_config.trace_path),
+        trace=trace,
         max_loops=active_config.max_loops,
         checkpointer=checkpointer,
-        progress=ProgressReporter(enabled=active_config.show_progress),
+        progress=progress,
         context_provider=RuntimeContextProvider(memory=memory_store, skills=skill_store),
         close_callbacks=[checkpointer.conn.close, agent_store.close],
     )
