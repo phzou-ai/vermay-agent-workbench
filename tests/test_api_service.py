@@ -95,7 +95,7 @@ def test_service_preserves_mcp_selection_on_resume(tmp_path):
     )
     selection = MCPSelectionConfig(
         servers=("k8s",),
-        prompts=(MCPPromptSelectionConfig(server="k8s", name="k8s-debug"),),
+        prompts=(MCPPromptSelectionConfig(server="k8s", name="k8s-debug", arguments={"service": "phzou-core"}),),
         resources=(MCPResourceSelectionConfig(server="k8s", uri="k8s://cluster/default/services"),),
     )
 
@@ -103,10 +103,10 @@ def test_service_preserves_mcp_selection_on_resume(tmp_path):
     service.resume("session-1", approved=True)
 
     assert built_configs[1].mcp_servers == ("k8s",)
-    assert built_configs[1].mcp_prompts == ("k8s:k8s-debug",)
+    assert built_configs[1].mcp_prompts == ("k8s:k8s-debug?service=phzou-core",)
     assert built_configs[1].mcp_resources == ("k8s:k8s://cluster/default/services",)
     assert built_configs[2].mcp_servers == ("k8s",)
-    assert built_configs[2].mcp_prompts == ("k8s:k8s-debug",)
+    assert built_configs[2].mcp_prompts == ("k8s:k8s-debug?service=phzou-core",)
     assert built_configs[2].mcp_resources == ("k8s:k8s://cluster/default/services",)
     service.close()
     store.close()

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Callable
 
 from mini_agent.langgraph_runtime import LangGraphAgentRuntime, ModelProviderConfig
+from mini_agent.mcp_transport import MCPTransportError
 
 from ..app_factory import ROOT, RuntimeFactoryConfig, build_runtime
 
@@ -68,7 +69,7 @@ def run_prompt(argv: list[str]) -> None:
     try:
         model_config = _model_provider_config_from_args(args)
         trace_path = _trace_path(args.trace)
-    except ValueError as exc:
+    except (ValueError, MCPTransportError) as exc:
         parser.error(str(exc))
 
     try:
@@ -106,6 +107,8 @@ def run_prompt(argv: list[str]) -> None:
             return
 
         print(runtime.run(user_input, thread_id=args.thread_id))
+    except MCPTransportError as exc:
+        raise SystemExit(str(exc)) from exc
     finally:
         runtime.close()
 

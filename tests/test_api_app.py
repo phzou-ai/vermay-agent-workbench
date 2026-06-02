@@ -116,7 +116,13 @@ def test_api_start_accepts_mcp_selection_and_persists_metadata(tmp_path):
             "thread_id": "mcp-thread",
             "mcp": {
                 "servers": ["k8s"],
-                "prompts": [{"server": "k8s", "name": "k8s-debug"}],
+                "prompts": [
+                    {
+                        "server": "k8s",
+                        "name": "k8s-debug",
+                        "arguments": {"service": "phzou-core"},
+                    }
+                ],
                 "resources": [{"server": "k8s", "uri": "k8s://cluster/default/services"}],
             },
         },
@@ -124,14 +130,14 @@ def test_api_start_accepts_mcp_selection_and_persists_metadata(tmp_path):
 
     assert response.status_code == 200
     assert built_configs[-1].mcp_servers == ("k8s",)
-    assert built_configs[-1].mcp_prompts == ("k8s:k8s-debug",)
+    assert built_configs[-1].mcp_prompts == ("k8s:k8s-debug?service=phzou-core",)
     assert built_configs[-1].mcp_resources == ("k8s:k8s://cluster/default/services",)
 
     metadata = client.get("/sessions/mcp-thread")
     assert metadata.status_code == 200
     assert metadata.json()["mcp"] == {
         "servers": ["k8s"],
-        "prompts": [{"server": "k8s", "name": "k8s-debug"}],
+        "prompts": [{"server": "k8s", "name": "k8s-debug", "arguments": {"service": "phzou-core"}}],
         "resources": [{"server": "k8s", "uri": "k8s://cluster/default/services"}],
     }
     service.close()

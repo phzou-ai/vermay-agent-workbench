@@ -7,7 +7,7 @@ from mini_agent.langgraph_runtime import LangGraphAgentRuntime, ModelProviderCon
 
 from .checkpointing import build_sqlite_checkpointer
 from .context_builder import ContextBuilder
-from .mcp_client import MCPToolLoader
+from .mcp_client import MCPClientManager
 from .mcp_prompts import MCPPromptProvider
 from .mcp_resources import MCPResourceProvider
 from .memory import SQLiteMemoryStore
@@ -54,7 +54,7 @@ def build_runtime(config: RuntimeFactoryConfig | None = None) -> LangGraphAgentR
     register_weather_tools(registry)
     progress = ProgressReporter(enabled=active_config.show_progress)
     trace = TraceLogger(active_config.trace_path)
-    mcp_tools = MCPToolLoader(active_config.mcp_config_path, selected_servers=active_config.mcp_servers).load_tools()
+    mcp_tools = MCPClientManager(active_config.mcp_config_path, selected_servers=active_config.mcp_servers).load_tools()
     if active_config.mcp_servers and not mcp_tools:
         payload = {"servers": list(active_config.mcp_servers), "eligible_tools": 0}
         trace.log_event("mcp_selection_no_eligible_tools", payload)

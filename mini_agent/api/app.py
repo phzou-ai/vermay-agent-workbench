@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from mini_agent.app_factory import DEFAULT_AGENT_STORE_PATH, RuntimeFactoryConfig
 from mini_agent.langgraph_runtime import ModelProviderConfig
 from mini_agent.mcp_selection import MCPSelectionConfig
+from mini_agent.mcp_transport import MCPTransportError
 from mini_agent.storage import AgentStore
 
 from .service import AgentService, AgentStartOptions
@@ -24,6 +25,7 @@ class ModelConfigRequest(BaseModel):
 class MCPPromptSelectionRequest(BaseModel):
     server: str = Field(min_length=1)
     name: str = Field(min_length=1)
+    arguments: dict[str, str] = Field(default_factory=dict)
 
 
 class MCPResourceSelectionRequest(BaseModel):
@@ -90,7 +92,7 @@ def create_app(service: AgentService | None = None) -> FastAPI:
                     mcp=_mcp_config(request.mcp),
                 ),
             )
-        except (FileNotFoundError, json.JSONDecodeError, ValueError) as exc:
+        except (FileNotFoundError, json.JSONDecodeError, ValueError, MCPTransportError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=500, detail="agent runtime error") from exc
@@ -113,7 +115,7 @@ def create_app(service: AgentService | None = None) -> FastAPI:
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="session not found") from exc
-        except (FileNotFoundError, json.JSONDecodeError, ValueError) as exc:
+        except (FileNotFoundError, json.JSONDecodeError, ValueError, MCPTransportError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=500, detail="agent runtime error") from exc

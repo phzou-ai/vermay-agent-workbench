@@ -4,6 +4,7 @@
       "transport": "stdio",
       "command": ".venv/bin/python",
       "args": ["examples/mcp_servers/k8s/server.py"],
+      "timeout_seconds": 30,
       "read_only": true,
       "tool_exposure": "allowlist",
       "tools": {

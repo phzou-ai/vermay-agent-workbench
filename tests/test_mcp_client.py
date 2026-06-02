@@ -23,6 +23,7 @@ def test_mcp_config_parser_reads_stdio_servers(tmp_path):
                         "transport": "stdio",
                         "command": "python",
                         "args": ["server.py"],
+                        "timeout_seconds": 12.5,
                         "read_only_tools": ["search"],
                     }
                 }
@@ -35,7 +36,19 @@ def test_mcp_config_parser_reads_stdio_servers(tmp_path):
 
     assert servers[0].name == "docs"
     assert servers[0].command == "python"
+    assert servers[0].timeout_seconds == 12.5
     assert servers[0].read_only_tools == {"search"}
+
+
+def test_mcp_config_parser_rejects_invalid_timeout(tmp_path):
+    config = tmp_path / "mcp_servers.json"
+    config.write_text(
+        json.dumps({"servers": {"docs": {"transport": "stdio", "command": "python", "timeout_seconds": 0}}}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="timeout_seconds must be a positive number"):
+        load_mcp_server_configs(config)
 
 
 def test_mcp_tools_are_approval_required_by_default(tmp_path):

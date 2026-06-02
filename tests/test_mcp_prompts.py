@@ -15,10 +15,11 @@ class FakeMCPClientManager:
     def __init__(self, values: dict[tuple[str, str], str]) -> None:
         self.values = values
         self.calls: list[tuple[str, str]] = []
+        self.argument_calls: list[dict[str, str] | None] = []
 
     def get_prompt(self, server: str, name: str, arguments: dict[str, str] | None = None) -> str:
         self.calls.append((server, name))
-        assert arguments is None
+        self.argument_calls.append(arguments)
         return self.values[(server, name)]
 
 
@@ -84,6 +85,33 @@ def test_resolve_mcp_prompt_selection_uses_selected_server_for_unqualified_name(
     ]
 
 
+def test_resolve_mcp_prompt_selection_parses_query_arguments():
+    selections = resolve_mcp_prompt_selections(
+        ("k8s",),
+        ("k8s-service-health-check?service=phzou-core&namespace=default",),
+    )
+
+    assert selections[0].server == "k8s"
+    assert selections[0].name == "k8s-service-health-check"
+    assert selections[0].arguments == {"service": "phzou-core", "namespace": "default"}
+
+
+def test_resolve_mcp_prompt_selection_parses_qualified_query_arguments():
+    selections = resolve_mcp_prompt_selections(
+        ("docs", "k8s"),
+        ("k8s:k8s-service-health-check?service=phzou-core",),
+    )
+
+    assert selections[0].server == "k8s"
+    assert selections[0].name == "k8s-service-health-check"
+    assert selections[0].arguments == {"service": "phzou-core"}
+
+
+def test_resolve_mcp_prompt_selection_rejects_empty_argument_key():
+    with pytest.raises(ValueError, match="argument key cannot be empty"):
+        resolve_mcp_prompt_selections(("k8s",), ("debug?=value",))
+
+
 def test_resolve_mcp_prompt_selection_rejects_empty_name():
     with pytest.raises(ValueError, match="name cannot be empty"):
         resolve_mcp_prompt_selections(("docs",), ("",))
@@ -112,6 +140,23 @@ def test_runtime_context_injects_mcp_prompt_context():
     assert "prompt: debug" in str(messages[0].content)
     assert "Debug guidance" in str(messages[0].content)
     assert manager.calls == [("docs", "debug")]
+    assert manager.argument_calls == [None]
+
+
+def test_runtime_context_injects_mcp_prompt_context_with_arguments():
+    manager = FakeMCPClientManager({("k8s", "k8s-service-health-check"): "Service guidance"})
+    provider = MCPPromptProvider(
+        config_path=Path("unused.json"),
+        selected_servers=("k8s",),
+        selected_prompts=("k8s-service-health-check?service=phzou-core&namespace=default",),
+        client_manager=manager,
+    )
+
+    messages = RuntimeContextProvider(mcp_prompts=provider).context_messages("debug service")
+
+    assert manager.argument_calls == [{"service": "phzou-core", "namespace": "default"}]
+    assert "arguments: namespace, service" in str(messages[0].content)
+    assert "Service guidance" in str(messages[0].content)
 
 
 def test_runtime_context_orders_mcp_prompt_before_skills_memory_and_resources():
@@ -154,6 +199,7 @@ def test_mcp_prompt_provider_truncates_and_skips_by_total_budget():
     assert "uv" in content
     assert "123456" not in content
     assert manager.calls == [("docs", "one"), ("docs", "two")]
+    assert manager.argument_calls == [None, None]
 
 
 def test_mcp_client_get_prompt_uses_prompt_getter(tmp_path):
@@ -167,5 +213,20 @@ def test_mcp_client_get_prompt_uses_prompt_getter(tmp_path):
         return "Debug guidance"
 
     text = MCPToolLoader(config, prompt_getter=get_prompt).get_prompt("docs", "debug")
+
+    assert text == "Debug guidance"
+
+
+def test_mcp_client_get_prompt_passes_arguments(tmp_path):
+    config = tmp_path / "mcp_servers.json"
+    config.write_text('{"servers":{"docs":{"transport":"stdio","command":"server"}}}', encoding="utf-8")
+
+    def get_prompt(server: MCPServerConfig, name: str, arguments: dict[str, str] | None) -> str:
+        assert server.name == "docs"
+        assert name == "debug"
+        assert arguments == {"topic": "routing"}
+        return "Debug guidance"
+
+    text = MCPToolLoader(config, prompt_getter=get_prompt).get_prompt("docs", "debug", {"topic": "routing"})
 
     assert text == "Debug guidance"

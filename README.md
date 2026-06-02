@@ -261,13 +261,14 @@ Configured MCP servers are inactive by default during agent runs. Select a serve
 mini-agent "check k8s status" --mcp-server k8s
 mini-agent "check service status" --mcp-server k8s --mcp-resource k8s://cluster/services
 mini-agent "debug service health" --mcp-server k8s --mcp-prompt k8s-service-health-check
+mini-agent "debug phzou-core service" --mcp-server k8s --mcp-prompt 'k8s-service-health-check?service=phzou-core&namespace=default'
 ```
 
 Selected MCP tools are wrapped as LangChain `StructuredTool` instances with namespaced model-facing names such as `mcp__k8s__kubectl_get`. MCP tools require approval by default unless the server or tool is marked read-only in config.
 
-Selected MCP prompts and resources are read once at run start. Prompts are injected as bounded external workflow guidance; resources are injected as bounded external data. When multiple MCP servers are selected, use qualified forms such as `--mcp-prompt k8s:k8s-service-health-check` and `--mcp-resource k8s:k8s://cluster/services`.
+Selected MCP prompts and resources are read once at run start. Prompts are injected as bounded external workflow guidance; resources are injected as bounded external data. Prompt arguments use query-string syntax after the prompt name. When multiple MCP servers are selected, use qualified forms such as `--mcp-prompt 'k8s:k8s-service-health-check?service=phzou-core'` and `--mcp-resource k8s:k8s://cluster/services`.
 
-The tracked `k8s` server is a read-only example under `examples/mcp_servers/k8s/`. It uses the existing SSH/microk8s backend and the existing `MINI_AGENT_SSH_*` environment configuration. `config/mcp_servers.json` starts it with `.venv/bin/python`; adjust the command if using a different Python environment.
+The tracked `k8s` server is a read-only example under `examples/mcp_servers/k8s/`. It uses the existing SSH/microk8s backend and the existing `MINI_AGENT_SSH_*` environment configuration. `config/mcp_servers.json` starts it with `.venv/bin/python` and applies `timeout_seconds` to MCP discovery, tool calls, resources, and prompts. Adjust the command if using a different Python environment.
 
 ## Local Files
 
