@@ -37,6 +37,24 @@ class FakeRuntime:
         self.closed = True
 
 
+class FailingService:
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+        self.closed = False
+
+    def start(self, *args, **kwargs):
+        raise self.exc
+
+    def resume(self, *args, **kwargs):
+        raise self.exc
+
+    def get_session(self, thread_id):
+        return None
+
+    def close(self):
+        self.closed = True
+
+
 def make_client(tmp_path, runtime):
     store = AgentStore(tmp_path / "agent.sqlite")
     service = AgentService(
@@ -128,3 +146,30 @@ def test_api_invalid_resume_payload_returns_422(tmp_path):
     assert response.status_code == 422
     service.close()
     store.close()
+
+
+def test_api_start_maps_value_error_to_400():
+    client = TestClient(create_app(service=FailingService(ValueError("bad model config"))))
+
+    response = client.post("/sessions", json={"input": "hello"})
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "bad model config"
+
+
+def test_api_resume_maps_runtime_error_to_safe_500():
+    client = TestClient(create_app(service=FailingService(RuntimeError("secret internal detail"))))
+
+    response = client.post("/sessions/session-1/resume", json={"approved": True})
+
+    assert response.status_code == 500
+    assert response.json()["detail"] == "agent runtime error"
+
+
+def test_create_app_does_not_close_injected_service_on_shutdown():
+    service = FailingService(ValueError("unused"))
+
+    with TestClient(create_app(service=service)) as client:
+        assert client.get("/health").status_code == 200
+
+    assert service.closed is False

@@ -34,11 +34,24 @@ This removes the main structural ambiguity in the project. Future work should ex
 
 Responsibilities:
 
-- parse CLI arguments
-- start or resume a runtime
-- handle terminal approval prompts
+- provide the `mini-agent` console entry point
+- route prompt execution to `mini_agent/cli/prompt.py`
+- route named subcommands to `mini_agent/cli/subcommands.py`
+- keep compatibility re-exports while tests and downstream imports migrate
 
-Current status: focused on CLI behavior.
+Current status: thin dispatcher.
+
+### `mini_agent/cli/`
+
+Responsibilities:
+
+- prompt-run argument parsing
+- model provider option parsing
+- trace path validation
+- interactive approval prompting
+- subcommand parsing for `serve`, memory, skills, eval replay, and MCP inspection
+
+Current status: active CLI implementation boundary.
 
 ### `app_factory.py`
 
@@ -142,9 +155,10 @@ They intentionally avoid the `test_` filename prefix so default pytest does not 
 
 1. Keep a single active CLI runtime.
 2. Keep active docs aligned with `mini_agent/langgraph_runtime/`.
-3. Keep archived runtime out of main test and CLI paths.
-4. Split `langgraph_runtime/nodes.py` only when new runtime capabilities make the file materially harder to maintain.
-5. Keep server/API work on explicit durable checkpoint injection rather than direct-constructor in-memory defaults.
+3. Keep prompt and subcommand CLI logic under `mini_agent/cli/`.
+4. Keep archived runtime out of main test and CLI paths.
+5. Split `langgraph_runtime/nodes.py` only when new runtime capabilities make the file materially harder to maintain.
+6. Keep server/API work on explicit durable checkpoint injection rather than direct-constructor in-memory defaults.
 
 ## Do Not Do Yet
 

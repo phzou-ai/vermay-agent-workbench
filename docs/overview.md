@@ -53,10 +53,11 @@ CLI input
 - SSH identity file paths are redacted in command traces.
 - LangGraph checkpoint files are stored under `data/checkpoints/` and are not intended for Git.
 - API session metadata is stored in `data/agent.sqlite`.
+- The local metadata schema currently records version `1` in `schema_migrations`.
 - Local trace outputs are not intended for Git.
-- Evaluation replay defaults to recorded tool observations and does not execute live tools.
+- Evaluation replay defaults to recorded trace/scenario data and does not execute a live model or live tools.
 - Memory writes are explicit CLI operations only.
-- MCP tools require approval by default unless marked read-only in configuration.
+- MCP servers are inactive by default and must be selected per run; selected MCP tools require approval unless marked read-only in configuration.
 
 ## Local Storage
 

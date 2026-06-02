@@ -60,6 +60,27 @@ resume(thread_id, approved, reason=None) -> RunResult
 
 Compatibility methods that return strings remain available for CLI use, but API code should use `RunResult` payloads.
 
+## Error Mapping
+
+API routes map expected request and configuration failures to client-facing errors:
+
+```text
+invalid runtime/model configuration -> 400
+unknown session                     -> 404
+unexpected runtime failure          -> 500
+```
+
+Unexpected runtime failures return a compact generic detail string and do not expose raw internal exception text.
+
+## Service Ownership
+
+`create_app()` has two ownership modes:
+
+- When no service is provided, the app creates and closes its own `AgentService` and local `AgentStore`.
+- When a service is injected, the caller owns that service lifecycle.
+
+This keeps tests and embedded API usage from having resources closed unexpectedly by the FastAPI app factory.
+
 ## Session Mapping
 
 The API uses `thread_id` as the external session identifier.
@@ -85,6 +106,8 @@ Stored session metadata includes:
 - `updated_at`
 
 Raw graph state is not stored or returned by default.
+
+`max_loops` and model configuration are persisted as per-session overrides only when explicitly supplied. Sessions that use default runtime configuration resume through the default runtime configuration.
 
 ## Response Shape
 

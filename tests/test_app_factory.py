@@ -35,3 +35,33 @@ def test_app_factory_builds_runtime_with_registered_tools(tmp_path):
     assert len(runtime.close_callbacks) == 2
     runtime.close()
     assert runtime.close_callbacks == []
+
+
+def test_app_factory_passes_selected_mcp_servers_and_logs_zero_eligible_tools(tmp_path, monkeypatch):
+    captured_servers = []
+
+    def fake_loader(config_path, *, selected_servers=(), **kwargs):
+        captured_servers.extend(selected_servers)
+        return type("Loader", (), {"load_tools": lambda self: []})()
+
+    monkeypatch.setattr("mini_agent.app_factory.MCPToolLoader", fake_loader)
+    trace_path = tmp_path / "trace.jsonl"
+
+    runtime = build_runtime(
+        RuntimeFactoryConfig(
+            model=ModelProviderConfig(provider="ollama", options={"model": "test-model"}),
+            trace_path=trace_path,
+            checkpoint_path=tmp_path / "checkpoints" / "langgraph.sqlite",
+            agent_store_path=tmp_path / "agent.sqlite",
+            skills_path=tmp_path / "skills",
+            skill_proposals_path=tmp_path / "skill_proposals",
+            mcp_config_path=tmp_path / "mcp_servers.json",
+            mcp_servers=("docs",),
+            show_progress=False,
+        )
+    )
+
+    assert captured_servers == ["docs"]
+    assert "mcp_selection_no_eligible_tools" in trace_path.read_text(encoding="utf-8")
+
+    runtime.close()

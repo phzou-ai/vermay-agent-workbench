@@ -4,12 +4,23 @@
 
 `mini_agent/main.py`
 
-- Defines the `mini-agent` CLI.
-- Parses CLI arguments and maps them to runtime factory configuration.
-- Converts provider-specific flags and `--model-option key=value` into model provider options.
+- Defines the `mini-agent` console entry point.
+- Dispatches prompt execution or named subcommands.
+- Re-exports a small set of CLI helpers for compatibility with existing tests.
+
+`mini_agent/cli/prompt.py`
+
+- Parses prompt-run CLI arguments.
+- Maps provider-specific flags and `--model-option key=value` into model provider options.
+- Resolves trace paths.
 - Handles approval resume CLI options.
-- Dispatches subcommands for `serve`, memory, skills, eval replay, and MCP inspection.
 - Owns terminal-only interactive approval prompting.
+
+`mini_agent/cli/subcommands.py`
+
+- Dispatches subcommands for `serve`, memory, skills, eval replay, and MCP inspection.
+- Owns subcommand-specific argument parsing.
+- Keeps local SQLite store lifecycle scoped to each command invocation.
 
 ## API
 
@@ -60,11 +71,11 @@ This package is the only active runtime path. It is the production-oriented path
 - `result_summary.py`: shared summary helpers for terminal progress output.
 - `trace.py`: writes JSONL runtime events.
 - `progress.py`: renders the default human-readable harness progress transcript.
-- `storage.py`: local SQLite metadata store.
+- `storage.py`: local SQLite metadata store with schema version marker.
 - `memory.py`: SQLite-backed explicit-write memory.
 - `skills.py`: authored skill parser, retrieval, proposal generation, and approval.
 - `runtime_context.py`: injects selected memory and skills as initial system context.
-- `evaluation.py`: trace/scenario replay reporting without live tool execution.
+- `evaluation.py`: offline trace/scenario replay reporting without live model or live tool execution.
 - `mcp_client.py`: configured MCP client discovery and `StructuredTool` wrapping.
 - `types.py`: shared dataclasses for project message, tool-call, result, observation, and model-response payloads.
 
@@ -102,7 +113,7 @@ The active tool schema source is each tool's Pydantic `args_schema`. Model adapt
 
 - `weather_forecast` read-only external data tool backed by `wttr.in`.
 
-Configured MCP tools are loaded from `config/mcp_servers.json` during runtime construction. Discovered MCP tools are wrapped as `StructuredTool` objects and registered through the same `ToolRegistry` path as built-in tools.
+Configured MCP servers are inactive by default. Runtime construction loads MCP tools only from explicitly selected servers, such as `--mcp-server k8s`. Eligible discovered MCP tools are wrapped as `StructuredTool` objects with namespaced model-facing names and registered through the same `ToolRegistry` path as built-in tools.
 
 ## Infrastructure
 

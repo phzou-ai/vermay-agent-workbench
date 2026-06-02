@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from mini_agent.evaluation import TraceReplayService
+from mini_agent.evaluation import OfflineReplayService
 from mini_agent.storage import AgentStore
 
 
@@ -25,11 +25,14 @@ def test_eval_trace_replay_uses_recorded_tool_sequence(tmp_path):
         encoding="utf-8",
     )
     store = AgentStore(tmp_path / "agent.sqlite")
-    service = TraceReplayService(store=store, report_dir=tmp_path / "reports")
+    service = OfflineReplayService(store=store, report_dir=tmp_path / "reports")
 
     report = service.replay_trace(trace)
 
     assert report.status == "passed"
+    assert report.replay_mode == "offline_trace"
+    assert report.live_model is False
+    assert report.live_tools is False
     assert report.tool_sequence_match is True
     assert report.final_answer_present is True
     assert len(service.list_runs()) == 1
@@ -51,11 +54,12 @@ def test_eval_scenario_replay_marks_mismatched_tool_sequence_failed(tmp_path):
         encoding="utf-8",
     )
     store = AgentStore(tmp_path / "agent.sqlite")
-    service = TraceReplayService(store=store, report_dir=tmp_path / "reports")
+    service = OfflineReplayService(store=store, report_dir=tmp_path / "reports")
 
     report = service.replay_scenario(scenario)
 
     assert report.status == "failed"
+    assert report.replay_mode == "offline_scenario"
     assert report.tool_sequence_match is False
     assert "tool sequence mismatch" in report.errors[0]
     store.close()

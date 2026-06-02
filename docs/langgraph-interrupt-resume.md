@@ -12,13 +12,14 @@ The implementation is centered on:
 
 ## Runtime Entry
 
-The CLI parses terminal arguments in `mini_agent/main.py` and builds the LangGraph runtime through `build_runtime()` in `mini_agent/app_factory.py`.
+The console entry point in `mini_agent/main.py` dispatches prompt execution to `mini_agent/cli/prompt.py`. Prompt execution builds the LangGraph runtime through `build_runtime()` in `mini_agent/app_factory.py`.
 
 Default execution path:
 
 ```text
 mini-agent "<prompt>"
   -> main()
+  -> run_prompt()
   -> build_runtime()
   -> TTY: CLI run_langgraph_with_interactive_approval(...)
   -> non-TTY: LangGraphAgentRuntime.run()
@@ -29,6 +30,7 @@ Manual approval resume path:
 ```text
 mini-agent --thread-id <id> --resume-approval true
   -> main()
+  -> run_prompt()
   -> build_runtime()
   -> LangGraphAgentRuntime.resume(thread_id=<id>, approved=true)
 ```

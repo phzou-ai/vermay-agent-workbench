@@ -211,9 +211,9 @@ mini-agent skills approve <proposal-id>
 
 Approved skills live in `skills/`. Generated proposals live in `data/skill_proposals/`.
 
-## Evaluation Replay
+## Offline Evaluation Replay
 
-Replay evaluates a recorded trace or scenario without executing live tools.
+Replay evaluates a recorded trace or scenario without executing a live model or live tools.
 
 ```bash
 mini-agent eval replay --trace traces/latest.jsonl
@@ -231,9 +231,16 @@ List configured MCP tools:
 
 ```bash
 mini-agent mcp list-tools
+mini-agent mcp list-tools --server k8s
 ```
 
-Discovered MCP tools are wrapped as LangChain `StructuredTool` instances. MCP tools require approval by default unless the server or tool is marked read-only in config.
+Configured MCP servers are inactive by default during agent runs. Select a server explicitly:
+
+```bash
+mini-agent "check k8s status" --mcp-server k8s
+```
+
+Selected MCP tools are wrapped as LangChain `StructuredTool` instances with namespaced model-facing names such as `mcp__k8s__kubectl_get`. MCP tools require approval by default unless the server or tool is marked read-only in config.
 
 ## Local Files
 

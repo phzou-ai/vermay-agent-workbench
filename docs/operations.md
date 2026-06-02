@@ -153,9 +153,9 @@ mini-agent skills approve <proposal-id>
 
 Generated skills remain proposals under `data/skill_proposals/` until approved.
 
-## Evaluation Replay
+## Offline Evaluation Replay
 
-Replay uses recorded tool outputs only. It does not execute live SSH, MCP, or dangerous tools.
+Replay uses recorded trace or scenario data only. It does not execute a live model, live SSH, MCP, or dangerous tools.
 
 ```bash
 mini-agent eval replay --trace traces/latest.jsonl
@@ -171,9 +171,10 @@ MCP client configuration lives in `config/mcp_servers.json`.
 
 ```bash
 mini-agent mcp list-tools
+mini-agent mcp list-tools --server k8s
 ```
 
-MCP tools are approval-required by default. A server or individual tool must be explicitly marked read-only in config to bypass approval.
+Configured MCP servers are inactive during normal agent runs until selected with `--mcp-server`. MCP tools are approval-required by default. A server or individual tool must be explicitly marked read-only in config to bypass approval.
 
 ## Trace Path
 
