@@ -85,6 +85,7 @@ def test_mcp_cli_list_resources_and_prompts(tmp_path, monkeypatch, capsys):
                     title="Guide",
                     mime_type="text/markdown",
                     size=10,
+                    is_template=False,
                     description="Documentation guide.",
                 )
             ]

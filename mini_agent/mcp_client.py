@@ -45,6 +45,7 @@ class MCPResourceDefinition:
     description: str = ""
     mime_type: str | None = None
     size: int | None = None
+    is_template: bool = False
 
 
 @dataclass(frozen=True)
@@ -304,8 +305,27 @@ async def _discover_stdio_resources(server: MCPServerConfig) -> list[MCPResource
                         description=getattr(resource, "description", None) or "",
                         mime_type=getattr(resource, "mimeType", None),
                         size=getattr(resource, "size", None),
+                        is_template=False,
                     )
                 )
+            try:
+                template_result = await session.list_resource_templates()
+            except Exception:
+                template_result = None
+            if template_result is not None:
+                for template in template_result.resourceTemplates:
+                    resources.append(
+                        MCPResourceDefinition(
+                            server=server,
+                            uri=str(getattr(template, "uriTemplate", "")),
+                            name=str(getattr(template, "name", "")),
+                            title=getattr(template, "title", None),
+                            description=getattr(template, "description", None) or "",
+                            mime_type=getattr(template, "mimeType", None),
+                            size=None,
+                            is_template=True,
+                        )
+                    )
             return resources
 
 

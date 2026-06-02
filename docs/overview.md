@@ -59,6 +59,7 @@ CLI input
 - Memory writes are explicit CLI operations only.
 - MCP servers are inactive by default and must be selected per run; selected MCP tools require approval unless marked read-only in configuration.
 - MCP prompts and resources are injected only when explicitly requested; prompts are workflow guidance, resources are external data.
+- The tracked Kubernetes MCP server is a read-only example under `examples/mcp_servers/k8s/`.
 
 ## Local Storage
 
@@ -72,6 +73,7 @@ The project uses SQLite for metadata and files for larger artifacts:
 - `data/eval_runs/*.json`: generated replay reports, local-only by default.
 - `config/mcp_servers.json`: configured MCP clients.
 - `config/model_profiles.json`: model profiles and router rules.
+- `examples/mcp_servers/k8s/`: read-only Kubernetes MCP example server.
 
 ## Current Non-Goals
 

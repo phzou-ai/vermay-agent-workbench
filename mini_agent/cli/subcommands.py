@@ -209,6 +209,7 @@ def run_mcp_command(argv: list[str]) -> None:
                         f"title={resource.title or ''}",
                         f"mime_type={resource.mime_type or ''}",
                         f"size={resource.size if resource.size is not None else ''}",
+                        f"template={resource.is_template}",
                         f"description={resource.description}",
                     ]
                 )

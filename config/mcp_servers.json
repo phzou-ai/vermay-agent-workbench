@@ -1,3 +1,16 @@
 {
-  "servers": {}
+  "servers": {
+    "k8s": {
+      "transport": "stdio",
+      "command": ".venv/bin/python",
+      "args": ["examples/mcp_servers/k8s/server.py"],
+      "read_only": true,
+      "tool_exposure": "allowlist",
+      "tools": {
+        "kubectl_get": {},
+        "kubectl_describe": {},
+        "cluster_events": {}
+      }
+    }
+  }
 }

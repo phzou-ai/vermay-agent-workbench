@@ -120,6 +120,12 @@ Configured MCP servers are inactive by default. Runtime construction loads MCP t
 
 Explicitly selected MCP prompts and resources are read once at run start. `RuntimeContextProvider` injects them in this order: MCP prompts, local authored skills, explicit memory, MCP resources. Prompts are treated as external workflow guidance; resources are treated as untrusted external data.
 
+`examples/mcp_servers/k8s/`
+
+- Read-only MCP stdio server for Kubernetes inspection.
+- Reuses the existing SSH/microk8s backend.
+- Exposes read-only tools, resources, and prompts without adding Kubernetes-specific logic to the runtime core.
+
 ## Infrastructure
 
 `mini_agent/infra/ssh.py`

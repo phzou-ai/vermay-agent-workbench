@@ -266,6 +266,8 @@ Selected MCP tools are wrapped as LangChain `StructuredTool` instances with name
 
 Selected MCP prompts and resources are read once at run start. Prompts are injected as bounded external workflow guidance; resources are injected as bounded external data. When multiple MCP servers are selected, use qualified forms such as `--mcp-prompt k8s:service-health-check` and `--mcp-resource k8s:k8s://cluster/services`.
 
+The tracked `k8s` server is a read-only example under `examples/mcp_servers/k8s/`. It uses the existing SSH/microk8s backend and the existing `MINI_AGENT_SSH_*` environment configuration. `config/mcp_servers.json` starts it with `.venv/bin/python`; adjust the command if using a different Python environment.
+
 ## Local Files
 
 Tracked examples:
@@ -274,6 +276,7 @@ Tracked examples:
 config/model_profiles.json
 config/mcp_servers.json
 evals/scenarios/weather.json
+examples/mcp_servers/k8s/
 skills/kubernetes-readonly-debug.md
 ```
 

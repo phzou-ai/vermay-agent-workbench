@@ -203,6 +203,8 @@ mini-agent "check service status" --mcp-server k8s --mcp-resource k8s://cluster/
 
 Prompts and resources are read once at run start. Prompts are injected as external workflow guidance before local skills, memory, and resources. Resources are injected as external data after local memory. When multiple MCP servers are selected, use qualified forms such as `--mcp-prompt k8s:service-health-check` and `--mcp-resource k8s:k8s://cluster/services`.
 
+The tracked `k8s` MCP server lives under `examples/mcp_servers/k8s/` and exposes read-only Kubernetes tools, resources, and prompts. It uses the existing SSH/microk8s backend, so live tool/resource reads require the existing `MINI_AGENT_SSH_*` environment configuration. The tracked config starts it with `.venv/bin/python`; update `config/mcp_servers.json` if the project is run from another Python environment.
+
 ## Trace Path
 
 `--trace` accepts a filename or relative subpath under `traces/`:
