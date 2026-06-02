@@ -227,11 +227,14 @@ Run metadata is stored in `data/agent.sqlite`. Full reports are written to `data
 
 MCP client configuration lives in `config/mcp_servers.json`.
 
-List configured MCP tools:
+List configured MCP servers and capabilities:
 
 ```bash
+mini-agent mcp list-servers
 mini-agent mcp list-tools
 mini-agent mcp list-tools --server k8s
+mini-agent mcp list-resources --server k8s
+mini-agent mcp list-prompts --server k8s
 ```
 
 Configured MCP servers are inactive by default during agent runs. Select a server explicitly:
@@ -240,7 +243,7 @@ Configured MCP servers are inactive by default during agent runs. Select a serve
 mini-agent "check k8s status" --mcp-server k8s
 ```
 
-Selected MCP tools are wrapped as LangChain `StructuredTool` instances with namespaced model-facing names such as `mcp__k8s__kubectl_get`. MCP tools require approval by default unless the server or tool is marked read-only in config.
+Selected MCP tools are wrapped as LangChain `StructuredTool` instances with namespaced model-facing names such as `mcp__k8s__kubectl_get`. MCP tools require approval by default unless the server or tool is marked read-only in config. MCP resources and prompts can be listed for inspection; runtime injection is handled in later batches.
 
 ## Local Files
 

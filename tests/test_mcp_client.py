@@ -4,7 +4,13 @@ import json
 
 import pytest
 
-from mini_agent.mcp_client import MCPToolDefinition, MCPToolLoader, load_mcp_server_configs
+from mini_agent.mcp_client import (
+    MCPPromptDefinition,
+    MCPResourceDefinition,
+    MCPToolDefinition,
+    MCPToolLoader,
+    load_mcp_server_configs,
+)
 
 
 def test_mcp_config_parser_reads_stdio_servers(tmp_path):
@@ -268,3 +274,50 @@ def test_mcp_tool_reports_include_policy_fields(tmp_path):
     assert reports[1].original_name == "write"
     assert reports[1].exposed_by_policy is False
     assert reports[1].requires_approval is True
+
+
+def test_mcp_list_resources_uses_discovery_without_registering_tools(tmp_path):
+    config = tmp_path / "mcp_servers.json"
+    config.write_text(json.dumps({"servers": {"docs": {"transport": "stdio", "command": "server"}}}), encoding="utf-8")
+
+    def discover_resources(server):
+        return [
+            MCPResourceDefinition(
+                server=server,
+                uri="docs://guide",
+                name="guide",
+                title="Guide",
+                description="Documentation guide.",
+                mime_type="text/markdown",
+                size=100,
+            )
+        ]
+
+    resources = MCPToolLoader(config, resource_discovery=discover_resources).list_resources(server_name="docs")
+
+    assert resources[0].server.name == "docs"
+    assert resources[0].uri == "docs://guide"
+    assert resources[0].title == "Guide"
+    assert resources[0].mime_type == "text/markdown"
+
+
+def test_mcp_list_prompts_uses_discovery_without_registering_tools(tmp_path):
+    config = tmp_path / "mcp_servers.json"
+    config.write_text(json.dumps({"servers": {"docs": {"transport": "stdio", "command": "server"}}}), encoding="utf-8")
+
+    def discover_prompts(server):
+        return [
+            MCPPromptDefinition(
+                server=server,
+                name="debug",
+                title="Debug",
+                description="Debug prompt.",
+                arguments=[{"name": "service", "required": True}],
+            )
+        ]
+
+    prompts = MCPToolLoader(config, prompt_discovery=discover_prompts).list_prompts(server_name="docs")
+
+    assert prompts[0].server.name == "docs"
+    assert prompts[0].name == "debug"
+    assert prompts[0].arguments == [{"name": "service", "required": True}]

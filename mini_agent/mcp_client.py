@@ -37,6 +37,26 @@ class MCPToolDefinition:
 
 
 @dataclass(frozen=True)
+class MCPResourceDefinition:
+    server: MCPServerConfig
+    uri: str
+    name: str
+    title: str | None = None
+    description: str = ""
+    mime_type: str | None = None
+    size: int | None = None
+
+
+@dataclass(frozen=True)
+class MCPPromptDefinition:
+    server: MCPServerConfig
+    name: str
+    title: str | None = None
+    description: str = ""
+    arguments: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class MCPToolReport:
     server: str
     original_name: str
@@ -54,11 +74,15 @@ class MCPToolLoader:
         *,
         selected_servers: Iterable[str] | None = None,
         discovery: Callable[[MCPServerConfig], list[MCPToolDefinition]] | None = None,
+        resource_discovery: Callable[[MCPServerConfig], list[MCPResourceDefinition]] | None = None,
+        prompt_discovery: Callable[[MCPServerConfig], list[MCPPromptDefinition]] | None = None,
         caller: Callable[[MCPServerConfig, str, dict[str, Any]], Any] | None = None,
     ) -> None:
         self.config_path = config_path
         self.selected_servers = tuple(selected_servers) if selected_servers is not None else None
         self.discovery = discovery
+        self.resource_discovery = resource_discovery
+        self.prompt_discovery = prompt_discovery
         self.caller = caller
 
     def load_tools(self) -> list[StructuredTool]:
@@ -94,6 +118,21 @@ class MCPToolLoader:
                 )
         return reports
 
+    def list_servers(self) -> list[MCPServerConfig]:
+        return load_mcp_server_configs(self.config_path)
+
+    def list_resources(self, server_name: str | None = None) -> list[MCPResourceDefinition]:
+        resources: list[MCPResourceDefinition] = []
+        for server in self._server_configs_for_discovery(server_name):
+            resources.extend(self._discover_resources(server))
+        return resources
+
+    def list_prompts(self, server_name: str | None = None) -> list[MCPPromptDefinition]:
+        prompts: list[MCPPromptDefinition] = []
+        for server in self._server_configs_for_discovery(server_name):
+            prompts.extend(self._discover_prompts(server))
+        return prompts
+
     def _selected_server_configs(self) -> list[MCPServerConfig]:
         if self.selected_servers is None:
             return load_mcp_server_configs(self.config_path)
@@ -118,6 +157,16 @@ class MCPToolLoader:
         if self.discovery is not None:
             return self.discovery(server)
         return asyncio.run(_discover_stdio_tools(server))
+
+    def _discover_resources(self, server: MCPServerConfig) -> list[MCPResourceDefinition]:
+        if self.resource_discovery is not None:
+            return self.resource_discovery(server)
+        return asyncio.run(_discover_stdio_resources(server))
+
+    def _discover_prompts(self, server: MCPServerConfig) -> list[MCPPromptDefinition]:
+        if self.prompt_discovery is not None:
+            return self.prompt_discovery(server)
+        return asyncio.run(_discover_stdio_prompts(server))
 
     def _to_structured_tool(self, definition: MCPToolDefinition) -> StructuredTool:
         tool_name = _model_facing_tool_name(definition.server.name, definition.name)
@@ -212,6 +261,64 @@ async def _discover_stdio_tools(server: MCPServerConfig) -> list[MCPToolDefiniti
             return definitions
 
 
+async def _discover_stdio_resources(server: MCPServerConfig) -> list[MCPResourceDefinition]:
+    if not server.command:
+        raise ValueError(f"MCP server '{server.name}' requires command")
+    try:
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+    except ImportError as exc:
+        raise RuntimeError("MCP SDK is not installed. Install the 'mcp' Python package.") from exc
+
+    params = StdioServerParameters(command=server.command, args=server.args, env=server.env or None)
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.list_resources()
+            resources = []
+            for resource in result.resources:
+                resources.append(
+                    MCPResourceDefinition(
+                        server=server,
+                        uri=str(getattr(resource, "uri", "")),
+                        name=str(getattr(resource, "name", "")),
+                        title=getattr(resource, "title", None),
+                        description=getattr(resource, "description", None) or "",
+                        mime_type=getattr(resource, "mimeType", None),
+                        size=getattr(resource, "size", None),
+                    )
+                )
+            return resources
+
+
+async def _discover_stdio_prompts(server: MCPServerConfig) -> list[MCPPromptDefinition]:
+    if not server.command:
+        raise ValueError(f"MCP server '{server.name}' requires command")
+    try:
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+    except ImportError as exc:
+        raise RuntimeError("MCP SDK is not installed. Install the 'mcp' Python package.") from exc
+
+    params = StdioServerParameters(command=server.command, args=server.args, env=server.env or None)
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.list_prompts()
+            prompts = []
+            for prompt in result.prompts:
+                prompts.append(
+                    MCPPromptDefinition(
+                        server=server,
+                        name=str(getattr(prompt, "name", "")),
+                        title=getattr(prompt, "title", None),
+                        description=getattr(prompt, "description", None) or "",
+                        arguments=_serialize_prompt_arguments(getattr(prompt, "arguments", None)),
+                    )
+                )
+            return prompts
+
+
 async def _call_stdio_tool(server: MCPServerConfig, tool_name: str, arguments: dict[str, Any]) -> Any:
     if not server.command:
         raise ValueError(f"MCP server '{server.name}' requires command")
@@ -241,6 +348,21 @@ def _serialize_mcp_result(result: Any) -> Any:
                 serialized.append(str(item))
         return "\n".join(serialized)
     return str(result)
+
+
+def _serialize_prompt_arguments(arguments: Any) -> list[dict[str, Any]]:
+    if not isinstance(arguments, list):
+        return []
+    serialized = []
+    for argument in arguments:
+        serialized.append(
+            {
+                "name": str(getattr(argument, "name", "")),
+                "description": getattr(argument, "description", None) or "",
+                "required": getattr(argument, "required", None),
+            }
+        )
+    return serialized
 
 
 def _is_read_only(server: MCPServerConfig, tool_name: str) -> bool:
@@ -285,3 +407,6 @@ def _dedupe(values: Iterable[str]) -> list[str]:
         seen.add(value)
         result.append(value)
     return result
+
+
+MCPClientManager = MCPToolLoader

@@ -12,7 +12,7 @@ from ..app_factory import (
     ROOT,
 )
 from ..evaluation import OfflineReplayService
-from ..mcp_client import MCPToolLoader
+from ..mcp_client import MCPClientManager, load_mcp_server_configs
 from ..memory import SQLiteMemoryStore
 from ..skills import SkillStore
 from ..storage import AgentStore
@@ -152,13 +152,37 @@ def run_eval_command(argv: list[str]) -> None:
 def run_mcp_command(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(prog="mini-agent mcp")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    list_parser = subparsers.add_parser("list-tools")
-    list_parser.add_argument("--config", default=str(DEFAULT_MCP_CONFIG_PATH))
-    list_parser.add_argument("--server", default=None, help="Configured MCP server name to inspect")
-    args = parser.parse_args(argv)
+    config_parent = argparse.ArgumentParser(add_help=False)
+    config_parent.add_argument("--config", default=str(DEFAULT_MCP_CONFIG_PATH))
 
-    if args.command == "list-tools":
-        reports = MCPToolLoader(Path(args.config)).list_tool_reports(server_name=args.server)
+    subparsers.add_parser("list-servers", parents=[config_parent])
+
+    list_tools_parser = subparsers.add_parser("list-tools", parents=[config_parent])
+    list_tools_parser.add_argument("--server", default=None, help="Configured MCP server name to inspect")
+
+    list_resources_parser = subparsers.add_parser("list-resources", parents=[config_parent])
+    list_resources_parser.add_argument("--server", default=None, help="Configured MCP server name to inspect")
+
+    list_prompts_parser = subparsers.add_parser("list-prompts", parents=[config_parent])
+    list_prompts_parser.add_argument("--server", default=None, help="Configured MCP server name to inspect")
+
+    args = parser.parse_args(argv)
+    config_path = Path(args.config)
+
+    if args.command == "list-servers":
+        for server in load_mcp_server_configs(config_path):
+            print(
+                "\t".join(
+                    [
+                        f"name={server.name}",
+                        f"transport={server.transport}",
+                        f"tool_exposure={server.tool_exposure}",
+                        f"read_only={server.read_only}",
+                    ]
+                )
+            )
+    elif args.command == "list-tools":
+        reports = MCPClientManager(config_path).list_tool_reports(server_name=args.server)
         for report in reports:
             print(
                 "\t".join(
@@ -170,6 +194,37 @@ def run_mcp_command(argv: list[str]) -> None:
                         f"exposed_by_policy={report.exposed_by_policy}",
                         f"requires_approval={report.requires_approval}",
                         f"description={report.description}",
+                    ]
+                )
+            )
+    elif args.command == "list-resources":
+        resources = MCPClientManager(config_path).list_resources(server_name=args.server)
+        for resource in resources:
+            print(
+                "\t".join(
+                    [
+                        f"server={resource.server.name}",
+                        f"uri={resource.uri}",
+                        f"name={resource.name}",
+                        f"title={resource.title or ''}",
+                        f"mime_type={resource.mime_type or ''}",
+                        f"size={resource.size if resource.size is not None else ''}",
+                        f"description={resource.description}",
+                    ]
+                )
+            )
+    elif args.command == "list-prompts":
+        prompts = MCPClientManager(config_path).list_prompts(server_name=args.server)
+        for prompt in prompts:
+            arguments = ",".join(argument["name"] for argument in prompt.arguments if argument.get("name"))
+            print(
+                "\t".join(
+                    [
+                        f"server={prompt.server.name}",
+                        f"name={prompt.name}",
+                        f"title={prompt.title or ''}",
+                        f"arguments={arguments}",
+                        f"description={prompt.description}",
                     ]
                 )
             )

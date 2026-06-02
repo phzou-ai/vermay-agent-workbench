@@ -170,11 +170,14 @@ Eval metadata is stored in `data/agent.sqlite`; full reports are written under `
 MCP client configuration lives in `config/mcp_servers.json`.
 
 ```bash
+mini-agent mcp list-servers
 mini-agent mcp list-tools
 mini-agent mcp list-tools --server k8s
+mini-agent mcp list-resources --server k8s
+mini-agent mcp list-prompts --server k8s
 ```
 
-Configured MCP servers are inactive during normal agent runs until selected with `--mcp-server`. MCP tools are approval-required by default. A server or individual tool must be explicitly marked read-only in config to bypass approval.
+Configured MCP servers are inactive during normal agent runs until selected with `--mcp-server`. MCP tools are approval-required by default. A server or individual tool must be explicitly marked read-only in config to bypass approval. Resource and prompt listing is inspection-only until the resource/prompt injection batches are implemented.
 
 ## Trace Path
 
