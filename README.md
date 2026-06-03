@@ -125,7 +125,6 @@ sequenceDiagram
 - Trace and scenario replay for evaluation.
 - Ollama and OpenAI-compatible model adapters with named model selection.
 - MCP client integration for explicitly selected tools, resources, and prompts.
-- Read-only Kubernetes MCP example server.
 - Local FastAPI server for agent session and task lifecycle.
 - Optional local A2A-compatible task routes.
 
@@ -442,31 +441,7 @@ Selected MCP tools are wrapped as LangChain `StructuredTool` instances with name
 
 Selected MCP prompts and resources are read once at run start. Prompts are injected as bounded external workflow guidance; resources are injected as bounded external data. Prompt arguments use query-string syntax after the prompt name. When multiple MCP servers are selected, use qualified forms such as `--mcp-prompt 'k8s:k8s-service-health-check?service=phzou-core'` and `--mcp-resource k8s:k8s://cluster/services`.
 
-The tracked `k8s` server is a read-only example under `examples/mcp_servers/k8s/`. It uses the existing SSH/microk8s backend and the existing `MINI_AGENT_SSH_*` environment configuration. `config/mcp_servers.json` starts it with `.venv/bin/python` and applies `timeout_seconds` to MCP discovery, tool calls, resources, and prompts. Adjust the command if using a different Python environment.
-
-## Local Files
-
-Project examples:
-
-```text
-config/models.json
-config/mcp_servers.json
-evals/scenarios/weather.json
-examples/mcp_servers/k8s/
-skills/kubernetes-readonly-debug.md
-```
-
-Generated local state:
-
-```text
-data/agent.sqlite
-data/checkpoints/*.sqlite
-data/eval_runs/*.json
-data/skill_proposals/*.md
-traces/*.jsonl
-```
-
-Generated local state is ignored by Git.
+A local read-only Kubernetes MCP test example exists under `examples/mcp_servers/k8s/`. It uses the existing SSH/microk8s backend and the existing `MINI_AGENT_SSH_*` environment configuration. `config/mcp_servers.json` starts it with `.venv/bin/python` and applies `timeout_seconds` to MCP discovery, tool calls, resources, and prompts. Adjust the command if using a different Python environment.
 
 ## Documentation
 
