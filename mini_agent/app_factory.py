@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from mini_agent.langgraph_runtime import LangGraphAgentRuntime, ModelProviderConfig, build_model_client
+from mini_agent.model_selection import resolve_model_selection
 
 from .checkpointing import build_sqlite_checkpointer
 from .context_builder import ContextBuilder
@@ -29,11 +30,13 @@ DEFAULT_AGENT_STORE_PATH = ROOT / "data" / "agent.sqlite"
 DEFAULT_SKILLS_PATH = ROOT / "skills"
 DEFAULT_SKILL_PROPOSALS_PATH = ROOT / "data" / "skill_proposals"
 DEFAULT_MCP_CONFIG_PATH = ROOT / "config" / "mcp_servers.json"
+DEFAULT_MODEL_CONFIG_PATH = ROOT / "config" / "models.json"
 
 
 @dataclass(frozen=True)
 class RuntimeFactoryConfig:
-    model: ModelProviderConfig = field(default_factory=ModelProviderConfig)
+    model: ModelProviderConfig | None = None
+    model_config_path: Path = DEFAULT_MODEL_CONFIG_PATH
     max_loops: int = 5
     show_progress: bool = True
     trace_path: Path = DEFAULT_TRACE_PATH
@@ -49,6 +52,7 @@ class RuntimeFactoryConfig:
 
 def build_runtime(config: RuntimeFactoryConfig | None = None) -> LangGraphAgentRuntime:
     active_config = config or RuntimeFactoryConfig()
+    active_model = active_config.model or resolve_model_selection(config_path=active_config.model_config_path)
     registry = ToolRegistry()
     register_devops_tools(registry)
     register_weather_tools(registry)
@@ -89,7 +93,7 @@ def build_runtime(config: RuntimeFactoryConfig | None = None) -> LangGraphAgentR
     )
 
     return LangGraphAgentRuntime(
-        model=build_model_client(active_config.model),
+        model=build_model_client(active_model),
         tools=registry.tools(),
         permission_gate=PermissionGate(registry),
         system_prompt=_default_system_prompt(),

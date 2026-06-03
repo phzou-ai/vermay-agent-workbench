@@ -27,10 +27,17 @@
 `mini_agent/api/`
 
 - `app.py`: FastAPI app factory and HTTP route definitions.
-- `service.py`: service boundary for starting sessions, resuming approval, and reading session metadata.
-- `session_store.py`: SQLite-backed API session metadata, including selected MCP session configuration.
+- `a2a_readiness.py`: local projection helpers for A2A task, status, and artifact adapter work.
+- `a2a/`: opt-in A2A adapter package and protocol route definitions over `AgentService`.
+- `service.py`: service boundary for creating sessions, starting or queueing tasks, resuming approval, retrying terminal tasks, cancelling tasks, and reading task/session metadata.
+- `session_models.py`: project-level task status model and lifecycle predicates.
+- `session_store.py`: SQLite-backed session, task, task-event, and task-artifact metadata, including selected MCP task configuration and retry lineage.
+- `task_contract.py`: shared task event type contract and event classification sets.
+- `lifecycle.py`: compact lifecycle observer abstractions for API operation monitoring.
 
-The API layer uses `LangGraphAgentRuntime.start()` and `resume()`. It accepts structured MCP session selection, stores that selection in `sessions.mcp`, and reuses it on approval resume. It does not call CLI string-output helpers and does not expose raw graph state by default.
+The API layer uses `LangGraphAgentRuntime.start()` and `resume()` through task-level service methods. It accepts structured MCP task selection, stores that selection in task metadata, and reuses it on approval resume. It does not call CLI string-output helpers and does not expose raw graph state by default.
+
+A2A support belongs at this API boundary. A2A adapters call `AgentService` and use `a2a_readiness.py`-style projection helpers; they should not modify the LangGraph graph topology or introduce A2A protocol concepts into `mini_agent/langgraph_runtime/`.
 
 ## Runtime Factory
 
@@ -71,6 +78,7 @@ This package is the only active runtime path. It is the production-oriented path
 - `result_summary.py`: shared summary helpers for terminal progress output.
 - `trace.py`: writes JSONL runtime events.
 - `progress.py`: renders the default human-readable harness progress transcript.
+- `errors.py`: shared project error taxonomy for API response mapping and failed-task persistence.
 - `storage.py`: local SQLite metadata store with schema version marker.
 - `memory.py`: SQLite-backed explicit-write memory.
 - `skills.py`: authored skill parser, retrieval, proposal generation, and approval.
@@ -96,16 +104,23 @@ The active tool schema source is each tool's Pydantic `args_schema`. Model adapt
 
 - Calls Ollama `/api/chat`.
 - Uses a small JSON action protocol for final answers and tool calls.
-- Reads default model configuration from `.env`, `.env.local`, `.env.dev.local`, or shell environment.
+- Reads model configuration from `config/models.json` or explicit runtime overrides.
+
+`mini_agent/model_clients/openai_compatible.py`
+
+- Calls OpenAI-style `{base_url}/chat/completions` endpoints.
+- Sends Bearer authentication when `api_key` or `api_key_env` is configured.
+- Uses standard Chat Completions `tools`, `tool_choice`, assistant `tool_calls`, and `role: tool` messages with `tool_call_id`.
+- Omits `tools` and `tool_choice` when no tools are available.
 
 `mini_agent/langgraph_runtime/model_factory.py`
 
 - Builds provider-specific model adapters for the active runtime.
 - Accepts `ModelProviderConfig(provider, options)`.
 - Validates provider-specific options.
-- Supports `ollama`, `openai_compatible`, and `router`.
+- Supports configured `ollama` and `openai_compatible` model providers.
 - `openai_compatible` targets OpenAI-style `/chat/completions` endpoints such as vLLM.
-- `router` loads profiles and deterministic routing rules from `config/model_profiles.json`.
+- `config/models.json` defines named model provider configs and the primary model.
 
 ## Tool Domains
 

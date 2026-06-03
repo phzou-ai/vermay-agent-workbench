@@ -6,9 +6,10 @@ from pathlib import Path
 from typing import Callable
 
 from mini_agent.langgraph_runtime import LangGraphAgentRuntime, ModelProviderConfig
+from mini_agent.model_selection import resolve_model_selection
 from mini_agent.mcp_transport import MCPTransportError
 
-from ..app_factory import ROOT, RuntimeFactoryConfig, build_runtime
+from ..app_factory import DEFAULT_MODEL_CONFIG_PATH, ROOT, RuntimeFactoryConfig, build_runtime
 
 
 def run_prompt(argv: list[str]) -> None:
@@ -19,14 +20,16 @@ def run_prompt(argv: list[str]) -> None:
         default="latest.jsonl",
         help="Trace JSONL filename or path under traces/. Absolute paths are allowed.",
     )
-    parser.add_argument("--model-provider", default="ollama", help="Model provider adapter to use")
-    parser.add_argument("--ollama-model", default=None, help="Override MINI_AGENT_OLLAMA_MODEL")
-    parser.add_argument("--ollama-base-url", default=None, help="Override MINI_AGENT_OLLAMA_BASE_URL")
+    parser.add_argument("--model-config", default=str(DEFAULT_MODEL_CONFIG_PATH), help="Model selection config path")
+    parser.add_argument("--model", default=None, help="Configured model name to use")
+    parser.add_argument("--model-provider", default=None, help="Legacy model provider adapter override")
+    parser.add_argument("--ollama-model", default=None, help="Override the configured Ollama model for this run")
+    parser.add_argument("--ollama-base-url", default=None, help="Override the configured Ollama base URL for this run")
     parser.add_argument(
         "--ollama-timeout-seconds",
         type=int,
         default=None,
-        help="Override MINI_AGENT_OLLAMA_TIMEOUT_SECONDS",
+        help="Override the configured Ollama timeout for this run",
     )
     parser.add_argument(
         "--model-option",
@@ -76,6 +79,7 @@ def run_prompt(argv: list[str]) -> None:
         runtime = build_runtime(
             RuntimeFactoryConfig(
                 model=model_config,
+                model_config_path=Path(args.model_config),
                 trace_path=trace_path,
                 max_loops=args.max_steps,
                 show_progress=not args.no_progress,
@@ -153,7 +157,8 @@ def _prompt_for_approval(message: str, thread_id: str) -> tuple[bool, str | None
         print("Please enter yes or no.")
 
 
-def _model_provider_config_from_args(args: argparse.Namespace) -> ModelProviderConfig:
+def _model_provider_config_from_args(args: argparse.Namespace) -> ModelProviderConfig | None:
+    has_model_selection = getattr(args, "model", None) is not None
     options: dict[str, object] = {}
     has_ollama_flags = any(
         value is not None
@@ -163,9 +168,21 @@ def _model_provider_config_from_args(args: argparse.Namespace) -> ModelProviderC
             args.ollama_timeout_seconds,
         )
     )
-    if args.model_provider != "ollama" and has_ollama_flags:
+    has_legacy_provider_config = args.model_provider is not None or has_ollama_flags or bool(args.model_option)
+    if has_model_selection and has_legacy_provider_config:
+        raise ValueError("--model cannot be combined with legacy model provider options")
+    if has_model_selection:
+        return resolve_model_selection(
+            config_path=Path(args.model_config),
+            model_name=args.model,
+        )
+    if not has_legacy_provider_config:
+        return None
+
+    provider = args.model_provider or "ollama"
+    if provider != "ollama" and has_ollama_flags:
         raise ValueError("ollama-specific CLI flags require --model-provider ollama")
-    if args.model_provider == "ollama":
+    if provider == "ollama":
         if args.ollama_model is not None:
             options["model"] = args.ollama_model
         if args.ollama_base_url is not None:
@@ -173,7 +190,7 @@ def _model_provider_config_from_args(args: argparse.Namespace) -> ModelProviderC
         if args.ollama_timeout_seconds is not None:
             options["timeout_seconds"] = args.ollama_timeout_seconds
     options.update(_parse_model_options(args.model_option))
-    return ModelProviderConfig(provider=args.model_provider, options=options)
+    return ModelProviderConfig(provider=provider, options=options)
 
 
 def _parse_model_options(values: list[str]) -> dict[str, str]:

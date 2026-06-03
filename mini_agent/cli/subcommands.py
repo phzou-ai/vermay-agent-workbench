@@ -42,9 +42,20 @@ def run_serve_command(argv: list[str]) -> None:
     parser = argparse.ArgumentParser(prog="mini-agent serve")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--enable-a2a", action="store_true", help="Expose local A2A protocol routes.")
     args = parser.parse_args(argv)
 
     import uvicorn
+
+    if args.enable_a2a:
+        from ..api.app import create_app
+
+        uvicorn.run(
+            create_app(enable_a2a=True),
+            host=args.host,
+            port=args.port,
+        )
+        return
 
     uvicorn.run(
         "mini_agent.api.app:create_app",

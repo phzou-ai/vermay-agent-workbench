@@ -10,7 +10,9 @@ from mini_agent.main import _model_provider_config_from_args, _parse_model_optio
 
 def make_args(**overrides):
     values = {
-        "model_provider": "ollama",
+        "model_config": "config/models.json",
+        "model": None,
+        "model_provider": None,
         "ollama_model": None,
         "ollama_base_url": None,
         "ollama_timeout_seconds": None,
@@ -18,6 +20,58 @@ def make_args(**overrides):
     }
     values.update(overrides)
     return argparse.Namespace(**values)
+
+
+def test_model_provider_config_uses_model_config_default(tmp_path):
+    config_path = tmp_path / "models.json"
+    config_path.write_text(
+        """
+{
+  "primary_model": "local_ollama",
+  "models": {
+    "local_ollama": {
+      "provider": "ollama",
+      "options": {"model": "test-model"}
+    }
+  }
+}
+""",
+        encoding="utf-8",
+    )
+
+    config = _model_provider_config_from_args(make_args(model_config=str(config_path)))
+
+    assert config is None
+
+
+def test_model_provider_config_resolves_named_model_selection(tmp_path):
+    config_path = tmp_path / "models.json"
+    config_path.write_text(
+        """
+{
+  "primary_model": "local_ollama",
+  "models": {
+    "local_ollama": {
+      "provider": "ollama",
+      "options": {}
+    },
+    "qwen_vllm": {
+      "provider": "openai_compatible",
+      "options": {
+        "model": "qwen",
+        "base_url": "http://localhost:8000/v1"
+      }
+    }
+  }
+}
+""",
+        encoding="utf-8",
+    )
+
+    config = _model_provider_config_from_args(make_args(model_config=str(config_path), model="qwen_vllm"))
+
+    assert config.provider == "openai_compatible"
+    assert config.options["model"] == "qwen"
 
 
 def test_parse_model_options_accepts_flat_key_value_pairs():
@@ -93,6 +147,16 @@ def test_non_ollama_provider_accepts_generic_model_options():
     }
 
 
+def test_model_selection_rejects_legacy_provider_options():
+    with pytest.raises(ValueError, match="cannot be combined"):
+        _model_provider_config_from_args(
+            make_args(
+                model="qwen_vllm",
+                model_option=["model=qwen"],
+            )
+        )
+
+
 def test_trace_path_maps_relative_values_to_traces_dir():
     path = _trace_path("custom.jsonl")
 
@@ -153,3 +217,25 @@ def test_serve_command_accepts_host_and_port(monkeypatch):
 
     assert calls[0][1]["host"] == "0.0.0.0"
     assert calls[0][1]["port"] == 9000
+
+
+def test_serve_command_can_enable_a2a_routes(monkeypatch):
+    calls = []
+    created = []
+
+    def fake_run(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    def fake_create_app(**kwargs):
+        created.append(kwargs)
+        return "app"
+
+    monkeypatch.setattr("uvicorn.run", fake_run)
+    monkeypatch.setattr("mini_agent.api.app.create_app", fake_create_app)
+
+    from mini_agent.main import _run_serve_command
+
+    _run_serve_command(["--enable-a2a"])
+
+    assert created == [{"enable_a2a": True}]
+    assert calls == [(("app",), {"host": "127.0.0.1", "port": 8000})]

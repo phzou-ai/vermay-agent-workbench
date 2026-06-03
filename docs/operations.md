@@ -13,7 +13,7 @@ python -m pip install -e .
 ## Run
 
 ```bash
-mini-agent "weather forecast for Shanghai"
+mini-agent "weather forecast for Beijing"
 ```
 
 The CLI uses `mini_agent/langgraph_runtime/`. No alternate runtime is exposed through the active CLI.
@@ -42,16 +42,24 @@ Available endpoints:
 
 ```text
 GET  /health
-POST /sessions
-GET  /sessions/{thread_id}
-POST /sessions/{thread_id}/resume
+POST /api/sessions
+GET  /api/sessions
+GET  /api/sessions/{session_id}
+POST /api/sessions/{session_id}/tasks
+GET  /api/tasks/{task_id}
+GET  /api/tasks/{task_id}/events
+GET  /api/tasks/{task_id}/stream
+POST /api/tasks/{task_id}/resume
+POST /api/tasks/{task_id}/cancel
+POST /api/tasks/{task_id}/retry
 ```
 
-`POST /sessions` accepts optional structured MCP selection:
+`POST /api/sessions` creates a long-lived session/context. `POST /api/sessions/{session_id}/tasks` starts one agent execution in that session and accepts optional structured MCP selection:
 
 ```json
 {
   "input": "debug service health",
+  "wait": true,
   "mcp": {
     "servers": ["k8s"],
     "prompts": [{"server": "k8s", "name": "service-health-check"}],
@@ -60,7 +68,33 @@ POST /sessions/{thread_id}/resume
 }
 ```
 
-API MCP prompt and resource selections must name a server listed in `mcp.servers`. The selected MCP configuration is stored as session metadata and reused on approval resume.
+`wait` defaults to `true`. When `wait` is `false`, the API returns quickly with a queued task; use `GET /api/tasks/{task_id}` and `GET /api/tasks/{task_id}/events` to inspect progress and final state.
+
+For live task lifecycle updates, use the SSE endpoint:
+
+```bash
+curl -N http://127.0.0.1:8000/api/tasks/<task-id>/stream
+```
+
+Cancel a task:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/tasks/<task-id>/cancel \
+  -H 'Content-Type: application/json' \
+  -d '{"reason":"operator requested"}'
+```
+
+Retry a terminal task as a new task:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/tasks/<task-id>/retry \
+  -H 'Content-Type: application/json' \
+  -d '{"reason":"operator requested retry","wait":false}'
+```
+
+Retry creates a new `task_id`, copies the source task input/model/MCP/max-loop settings, and records lineage through `root_task_id`, `retry_of_task_id`, and `attempt`. Completed retry tasks create their own final-answer artifact.
+
+API MCP prompt and resource selections must name a server listed in `mcp.servers`. The selected MCP configuration is stored as task metadata and reused on approval resume.
 
 The server is local-only by default and has no authentication. Keep the default bind address unless an access-control layer is added.
 
@@ -79,7 +113,7 @@ traces/*.jsonl
 The tracked configuration and scenario locations are:
 
 ```text
-config/model_profiles.json
+config/models.json
 config/mcp_servers.json
 evals/scenarios/*.json
 skills/*.md
@@ -87,20 +121,26 @@ skills/*.md
 
 ## Model Configuration
 
-The runtime builds model adapters through a provider factory. Supported providers are `ollama`, `openai_compatible`, and `router`.
+The runtime selects a configured model from `config/models.json` by default. The config defines a `primary_model` and a map of named model provider configurations.
 
-Default Ollama configuration is read from `.env` and can be overridden by `.env.local`, `.env.dev.local`, shell environment variables, or CLI flags.
+Ollama model settings live in `config/models.json` under the selected model's `options`.
+
+Use the primary model:
 
 ```bash
-MINI_AGENT_OLLAMA_MODEL=deepseek-v4-flash:cloud
-MINI_AGENT_OLLAMA_BASE_URL=http://127.0.0.1:11434
-MINI_AGENT_OLLAMA_TIMEOUT_SECONDS=120
+mini-agent "weather forecast for Beijing"
+```
+
+Use another configured model:
+
+```bash
+mini-agent "weather forecast for Beijing" --model local_ollama
 ```
 
 Provider-specific CLI override example:
 
 ```bash
-mini-agent "weather forecast for Shanghai" \
+mini-agent "weather forecast for Beijing" \
   --model-provider ollama \
   --ollama-model qwen3.6:27b \
   --ollama-base-url http://127.0.0.1:11434 \
@@ -110,7 +150,7 @@ mini-agent "weather forecast for Shanghai" \
 Advanced model provider options can be passed as repeated flat `key=value` pairs:
 
 ```bash
-mini-agent "weather forecast for Shanghai" \
+mini-agent "weather forecast for Beijing" \
   --model-provider ollama \
   --model-option model=deepseek-v4-flash:cloud \
   --model-option timeout_seconds=120
@@ -122,26 +162,20 @@ mini-agent "weather forecast for Shanghai" \
 
 `timeout_seconds` must be a positive integer.
 
-The CLI maps provider flags and generic model options into `ModelProviderConfig(provider, options)`. Runtime assembly lives in `mini_agent/app_factory.py`; provider-specific model construction lives in `mini_agent/langgraph_runtime/model_factory.py`.
+The CLI maps configured model selections or provider override flags into `ModelProviderConfig(provider, options)`. Runtime assembly lives in `mini_agent/app_factory.py`; provider-specific model construction lives in `mini_agent/langgraph_runtime/model_factory.py`.
 
 OpenAI-compatible endpoint example:
 
 ```bash
-mini-agent "weather forecast for Shanghai" \
+mini-agent "weather forecast for Beijing" \
   --model-provider openai_compatible \
   --model-option model=qwen \
   --model-option base_url=http://localhost:8000/v1
 ```
 
-Rule-router example:
+The OpenAI-compatible adapter uses Chat Completions request semantics: `{base_url}/chat/completions`, Bearer authentication when an API key is configured, standard `tools` with `tool_choice: auto` when tools are present, and standard assistant `tool_calls` plus `role: tool` messages with `tool_call_id` for tool results. When no tools are present, `tools` and `tool_choice` are omitted.
 
-```bash
-mini-agent "weather forecast for Shanghai" \
-  --model-provider router \
-  --model-option route_config=config/model_profiles.json
-```
-
-Routing v1 is deterministic and based on prompt keywords, message length, and tool-error presence.
+Ollama remains separate and uses the project's JSON action protocol rather than OpenAI tool message formatting.
 
 ## Memory
 
@@ -259,7 +293,7 @@ The terminal transcript is for scanability. It is not the durable audit log and 
 Disable progress output:
 
 ```bash
-mini-agent "weather forecast for Shanghai" --no-progress
+mini-agent "weather forecast for Beijing" --no-progress
 ```
 
 ## JSONL Traces

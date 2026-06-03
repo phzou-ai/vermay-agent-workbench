@@ -15,7 +15,7 @@ class RunResult:
 
     @property
     def status(self) -> str:
-        if self.interrupt_message is not None:
+        if self.interrupt_message is not None or self.interrupt is not None:
             return "interrupted"
         if self.final_answer is not None:
             return "completed"

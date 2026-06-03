@@ -4,6 +4,116 @@ Mini Agent Workbench is a Python local agent workbench for running a LangGraph-b
 
 The default runtime uses LangGraph with LangChain standard message and tool types, including `AIMessage.tool_calls`, `ToolMessage`, `ToolNode`, and `add_messages`.
 
+## Architecture
+
+Mini Agent Workbench is organized around three layers: external control surfaces, a task substrate, and the LangGraph runtime. The important boundary is that A2A is not the agent's core execution model. A2A is one protocol surface for exposing and interacting with agent capabilities, alongside the CLI, the local HTTP API, and future UI or webhook entry points.
+
+The Task / AgentService layer is the substrate. It owns the stable application contract: sessions, tasks, lifecycle state, events, artifacts, cancellation, retry, and resume. Protocol adapters should translate their own request and response shapes into this task model instead of reaching into LangGraph internals.
+
+LangGraph sits below that substrate as a resumable execution runtime. It owns graph execution, model and tool loops, approval interrupts, checkpoints, and continuation through `thread_id`. The outer layers may start, observe, cancel, or resume work, but they should not expose raw graph state as their public contract.
+
+```mermaid
+flowchart TB
+  subgraph Entry["External Control Surfaces"]
+    direction LR
+    CLI["CLI"]
+    API["HTTP API"]
+    A2A["A2A Adapter"]
+    UI["Future UI / Webhook"]
+  end
+
+  BUS["Control Surface Adapter Boundary"]
+
+  subgraph Base["Task / AgentService Substrate"]
+    direction LR
+    SVC["AgentService"]
+    STORE["Session / Task / Event Store"]
+    LIFE["Lifecycle State<br/>queued / running / interrupted / completed"]
+  end
+
+  subgraph Runtime["LangGraph Resumable Runtime"]
+    direction LR
+    LG["LangGraphAgentRuntime"]
+    GRAPH["Graph Execution<br/>model loop / tools / approval"]
+    CKPT["Checkpoint Store<br/>thread_id"]
+  end
+
+  CLI --> BUS
+  API --> BUS
+  A2A --> BUS
+  UI --> BUS
+
+  BUS --> SVC
+
+  SVC --> STORE
+  SVC --> LIFE
+  SVC --> LG
+
+  LG --> GRAPH
+  LG --> CKPT
+```
+
+A useful analogy is an operating system, but not as a strict one-to-one mapping. The CLI, HTTP API, and A2A adapter are like shells, RPC endpoints, or UI control surfaces: they let an outside caller submit work, inspect state, cancel, or resume. `AgentService` is closer to a process manager or job controller: it creates work records, tracks lifecycle state, coordinates persistence, and decides when execution should be resumed. LangGraph is closer to a virtual CPU or interpreter for agent execution: it advances the graph, runs model/tool steps, yields on approval interrupts, and uses checkpoints to continue later.
+
+In that analogy, `task_id` is the external job identifier, `session_id` or A2A `contextId` is the longer-lived conversation or working context, and LangGraph `thread_id` is an internal continuation/checkpoint identifier. `thread_id` should therefore be treated as runtime state, not as the public task identity.
+
+| OS/platform analogy | Mini Agent concept |
+| --- | --- |
+| Shell, RPC endpoint, or UI | CLI, HTTP API, A2A adapter, future UI |
+| Process manager or job controller | `AgentService` |
+| Process table and event log | Session / task / event store |
+| Job identifier | `task_id` |
+| Working context | `session_id` / A2A `contextId` |
+| Continuation or checkpoint pointer | LangGraph `thread_id` |
+| Virtual CPU or interpreter | `LangGraphAgentRuntime` |
+| Blocking trap or cooperative yield | Approval interrupt |
+
+Normal task execution follows this boundary: the control surface expresses the caller's request, `AgentService` turns it into a lifecycle-managed task, and LangGraph advances the agent execution.
+
+```mermaid
+sequenceDiagram
+  participant C as Control Surface<br/>CLI / API / A2A
+  participant S as AgentService
+  participant T as Task Store
+  participant L as LangGraph Runtime
+  participant K as Checkpoint Store
+
+  C->>S: start_task(input)
+  S->>T: create TaskRecord(task_id, running)
+  S->>L: start(input, thread_id)
+  L->>K: write checkpoint state
+  L-->>S: RunResult
+  S->>T: save completed / failed / stopped
+  S-->>C: TaskRecord / events / projection
+```
+
+Approval interrupts show why `task_id` and `thread_id` should stay separate. The caller resumes the externally visible task by `task_id`; `AgentService` looks up the internal LangGraph `thread_id` and resumes the checkpointed runtime state.
+
+```mermaid
+sequenceDiagram
+  participant C as Control Surface<br/>CLI / API / A2A
+  participant S as AgentService
+  participant T as Task Store
+  participant L as LangGraph Runtime
+  participant K as Checkpoint Store
+
+  C->>S: start_task(input)
+  S->>T: create TaskRecord(task_id, running)
+  S->>L: start(input, thread_id)
+  L->>K: checkpoint interrupted state
+  L-->>S: interrupt approval_required
+  S->>T: mark interrupted
+  S-->>C: input_required / approval_required
+
+  C->>S: resume_task(task_id, approved)
+  S->>T: lookup thread_id
+  S->>L: resume(thread_id, approved)
+  L->>K: load checkpoint
+  L-->>S: RunResult
+  S->>T: save final status
+  S-->>C: final TaskRecord / status update
+```
+
 ## Features
 
 - LangGraph runtime with ToolNode-backed tool execution.
@@ -13,10 +123,11 @@ The default runtime uses LangGraph with LangChain standard message and tool type
 - Explicit memory management.
 - Markdown-based skills.
 - Trace and scenario replay for evaluation.
-- Ollama, OpenAI-compatible, and rule-based model routing adapters.
+- Ollama and OpenAI-compatible model adapters with named model selection.
 - MCP client integration for explicitly selected tools, resources, and prompts.
 - Read-only Kubernetes MCP example server.
-- Local FastAPI server for agent session lifecycle.
+- Local FastAPI server for agent session and task lifecycle.
+- Optional local A2A-compatible task routes.
 
 ## Install
 
@@ -63,24 +174,48 @@ Override host or port:
 mini-agent serve --host 127.0.0.1 --port 9000
 ```
 
+Enable the optional local A2A routes:
+
+```bash
+mini-agent serve --enable-a2a
+```
+
 Health check:
 
 ```bash
 curl http://127.0.0.1:8000/health
 ```
 
-Start a session:
+Local lifecycle endpoints are under `/api`. A2A protocol routes stay at the protocol root only when enabled.
+
+Create a session:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/sessions \
+curl -X POST http://127.0.0.1:8000/api/sessions \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Ops session"}'
+```
+
+Start a task in a session:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/sessions/<session-id>/tasks \
   -H 'Content-Type: application/json' \
   -d '{"input":"weather forecast for Beijing"}'
 ```
 
-Start a session with explicit MCP selection:
+By default the request waits for the task to finish or interrupt. For long-running work, set `wait` to `false` and inspect the task later:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/sessions \
+curl -X POST http://127.0.0.1:8000/api/sessions/<session-id>/tasks \
+  -H 'Content-Type: application/json' \
+  -d '{"input":"weather forecast for Beijing","wait":false}'
+```
+
+Start a task with explicit MCP selection:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/sessions/<session-id>/tasks \
   -H 'Content-Type: application/json' \
   -d '{
     "input": "debug service health",
@@ -92,86 +227,123 @@ curl -X POST http://127.0.0.1:8000/sessions \
   }'
 ```
 
-Inspect a session:
+Inspect a task:
 
 ```bash
-curl http://127.0.0.1:8000/sessions/<thread-id>
+curl http://127.0.0.1:8000/api/tasks/<task-id>
+```
+
+Stream task lifecycle events:
+
+```bash
+curl -N http://127.0.0.1:8000/api/tasks/<task-id>/stream
+```
+
+Cancel a task:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/tasks/<task-id>/cancel \
+  -H 'Content-Type: application/json' \
+  -d '{"reason":"operator requested"}'
+```
+
+Retry a completed, failed, stopped, or canceled task as a new task:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/tasks/<task-id>/retry \
+  -H 'Content-Type: application/json' \
+  -d '{"reason":"try again"}'
 ```
 
 Resume an approval interrupt:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/sessions/<thread-id>/resume \
+curl -X POST http://127.0.0.1:8000/api/tasks/<task-id>/resume \
   -H 'Content-Type: application/json' \
   -d '{"approved":true,"reason":"approved by operator"}'
 ```
 
 The API is local-only by default and does not add authentication. Bind it carefully if exposing it outside the local machine.
 
-API MCP selection uses structured objects and is stored as session metadata. Approval resume reuses the same selected MCP servers, prompts, and resources.
+API MCP selection uses structured objects and is stored as task metadata. Approval resume reuses the same selected MCP servers, prompts, and resources.
+
+When A2A routes are enabled, the local server also exposes:
+
+```text
+GET  /.well-known/agent-card.json
+POST /message:send
+GET  /tasks/<task-id>
+POST /tasks/<task-id>:cancel
+POST /tasks/<task-id>:subscribe
+```
+
+The A2A routes project existing session, task, event, and artifact records. They do not expose LangGraph `thread_id`, raw graph state, raw prompts, raw model output, or full tool output.
 
 ## Model Configuration
 
-The runtime uses a model provider adapter. Supported providers are:
+The runtime selects a configured model from `config/models.json`. The file defines a `primary_model` and a map of named model configurations:
 
-- `ollama`
-- `openai_compatible`
-- `router`
-
-### Ollama
-
-Ollama is the default provider.
-
-```bash
-mini-agent "weather forecast for Beijing" \
-  --model-provider ollama \
-  --ollama-model deepseek-v4-flash:cloud \
-  --ollama-base-url http://127.0.0.1:11434 \
-  --ollama-timeout-seconds 120
+```json
+{
+  "primary_model": "local_ollama",
+  "models": {
+    "local_ollama": {
+      "provider": "ollama",
+      "options": {
+        "model": "deepseek-v4-flash:cloud",
+        "base_url": "http://127.0.0.1:11434",
+        "timeout_seconds": 120
+      }
+    },
+    "openai_gpt4o": {
+      "provider": "openai_compatible",
+      "options": {
+        "model": "gpt-4o",
+        "base_url": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "timeout_seconds": 120
+      }
+    }
+  }
+}
 ```
 
-Environment variables are also supported:
+Use the primary model:
 
 ```bash
-MINI_AGENT_OLLAMA_MODEL=deepseek-v4-flash:cloud
-MINI_AGENT_OLLAMA_BASE_URL=http://127.0.0.1:11434
-MINI_AGENT_OLLAMA_TIMEOUT_SECONDS=120
+mini-agent "weather forecast for Beijing"
 ```
 
-The project loads `.env`, `.env.local`, `.env.dev.local`, shell environment variables, and then CLI overrides.
-
-### OpenAI-Compatible
-
-Use this provider for OpenAI-style `/chat/completions` endpoints, including vLLM-compatible services.
+Use another configured model:
 
 ```bash
-mini-agent "weather forecast for Beijing" \
-  --model-provider openai_compatible \
-  --model-option model=qwen \
-  --model-option base_url=http://localhost:8000/v1
+mini-agent "weather forecast for Beijing" --model local_ollama
 ```
 
-Optional authentication can be passed through an environment variable name:
+API tasks can also select a configured model by name:
 
-```bash
-mini-agent "weather forecast for Beijing" \
-  --model-provider openai_compatible \
-  --model-option model=qwen \
-  --model-option base_url=https://api.example.com/v1 \
-  --model-option api_key_env=OPENAI_API_KEY
+```json
+{
+  "input": "weather forecast for Beijing",
+  "model": "openai_gpt4o"
+}
 ```
 
-### Router
+### Provider Notes
 
-The router provider selects a model profile from `config/model_profiles.json`.
+Ollama model settings should be configured under the selected model's `options`.
 
-```bash
-mini-agent "check k8s status" \
-  --model-provider router \
-  --model-option route_config=config/model_profiles.json
-```
+OpenAI-compatible models use OpenAI-style `/chat/completions` endpoints, including OpenAI and vLLM-compatible services. Optional authentication can be passed through `api_key` or through an environment variable named by `api_key_env`.
 
-`--model-option` accepts repeatable flat `key=value` pairs.
+The OpenAI-compatible adapter follows the Chat Completions tool-calling shape:
+
+- Requests are sent to `{base_url}/chat/completions`.
+- Authentication uses `Authorization: Bearer <api_key>` when `api_key` or `api_key_env` is configured.
+- When tools are available, requests include standard `tools` entries and `tool_choice: auto`.
+- When no tools are available, `tools` and `tool_choice` are omitted.
+- Tool call history is preserved using assistant `tool_calls` and `role: tool` messages with `tool_call_id`.
+
+This OpenAI-specific message shape is not applied to Ollama. The Ollama adapter continues to use the project's JSON action protocol for final answers and tool calls.
 
 ## Approval
 
@@ -183,11 +355,13 @@ In an interactive terminal, approval is prompted automatically:
 mini-agent "apply this kubernetes manifest: ..."
 ```
 
-Manual resume is available for durable workflows:
+Manual resume is available for low-level local checkpoint workflows:
 
 ```bash
 mini-agent --thread-id <thread-id> --resume-approval true --approval-reason "approved by operator"
 ```
+
+This CLI path resumes the internal LangGraph checkpoint directly by `thread_id`. API and A2A surfaces resume work through the externally visible `task_id`.
 
 LangGraph checkpoints are stored under `data/checkpoints/`.
 
@@ -272,10 +446,10 @@ The tracked `k8s` server is a read-only example under `examples/mcp_servers/k8s/
 
 ## Local Files
 
-Tracked examples:
+Project examples:
 
 ```text
-config/model_profiles.json
+config/models.json
 config/mcp_servers.json
 evals/scenarios/weather.json
 examples/mcp_servers/k8s/

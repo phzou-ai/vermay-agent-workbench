@@ -29,10 +29,11 @@ class OpenAICompatibleModelClient:
         payload = {
             "model": self.model,
             "messages": [_to_openai_message(message) for message in messages],
-            "tools": [_to_openai_tool(tool) for tool in tools],
-            "tool_choice": "auto",
             "temperature": 0,
         }
+        if tools:
+            payload["tools"] = [_to_openai_tool(tool) for tool in tools]
+            payload["tool_choice"] = "auto"
         request = urllib.request.Request(
             f"{self.base_url}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
@@ -55,6 +56,7 @@ class OpenAICompatibleModelClient:
 
         tool_calls = message.get("tool_calls") or []
         if tool_calls:
+            tool_call_id = tool_calls[0].get("id")
             function = tool_calls[0].get("function") or {}
             name = function.get("name")
             raw_arguments = function.get("arguments") or "{}"
@@ -63,7 +65,14 @@ class OpenAICompatibleModelClient:
             except (TypeError, json.JSONDecodeError):
                 arguments = {}
             if isinstance(name, str):
-                return ModelResponse(content=f"Calling tool {name}.", tool_call=ToolCall(name=name, arguments=arguments))
+                return ModelResponse(
+                    content=f"Calling tool {name}.",
+                    tool_call=ToolCall(
+                        name=name,
+                        arguments=arguments,
+                        id=tool_call_id if isinstance(tool_call_id, str) else None,
+                    ),
+                )
 
         content = message.get("content") or ""
         parsed = _parse_json_action(content)
@@ -86,12 +95,35 @@ class OpenAICompatibleModelClient:
         return f"OpenAI-compatible request failed: HTTP {exc.code} {exc.reason}{detail}"
 
 
-def _to_openai_message(message: Message) -> dict[str, str]:
-    role = "assistant" if message.role == "tool" else message.role
-    content = message.content
+def _to_openai_message(message: Message) -> dict:
     if message.role == "tool":
-        content = f"Tool observation from {message.name}:\n{message.content}"
-    return {"role": role, "content": content}
+        payload = {
+            "role": "tool",
+            "content": message.content,
+            "tool_call_id": message.tool_call_id or message.name or "unknown_tool_call",
+        }
+        return payload
+
+    payload: dict = {"role": message.role, "content": message.content}
+    if message.role == "assistant" and message.tool_calls:
+        payload["tool_calls"] = [_to_openai_tool_call(tool_call) for tool_call in message.tool_calls]
+        if payload["content"] == "":
+            payload["content"] = None
+    return payload
+
+
+def _to_openai_tool_call(tool_call: dict) -> dict:
+    arguments = tool_call.get("args") or tool_call.get("arguments") or {}
+    if not isinstance(arguments, str):
+        arguments = json.dumps(arguments, ensure_ascii=False)
+    return {
+        "id": str(tool_call.get("id") or "unknown_tool_call"),
+        "type": "function",
+        "function": {
+            "name": str(tool_call.get("name") or ""),
+            "arguments": arguments,
+        },
+    }
 
 
 def _to_openai_tool(tool: dict) -> dict:

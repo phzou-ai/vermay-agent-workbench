@@ -1,0 +1,35 @@
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class A2AMessage(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    role: str | None = None
+    parts: list[dict[str, Any]] = Field(default_factory=list)
+    message_id: str | None = Field(default=None, alias="messageId")
+    task_id: str | None = Field(default=None, alias="taskId")
+    context_id: str | None = Field(default=None, alias="contextId")
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class A2ASendMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    message: A2AMessage
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class A2ACancelTaskRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    reason: str | None = None
+
+
+class A2AAdapterResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    payload: dict[str, Any]

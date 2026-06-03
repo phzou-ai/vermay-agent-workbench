@@ -1,0 +1,30 @@
+{
+  "primary_model": "local_ollama",
+  "models": {
+    "local_ollama": {
+      "provider": "ollama",
+      "options": {
+        "model": "deepseek-v4-flash:cloud",
+        "base_url": "http://127.0.0.1:11434",
+        "timeout_seconds": 120
+      }
+    },
+    "qwen_vllm": {
+      "provider": "openai_compatible",
+      "options": {
+        "model": "qwen",
+        "base_url": "http://localhost:8000/v1",
+        "timeout_seconds": "120"
+      }
+    },
+    "openai_gpt4o": {
+      "provider": "openai_compatible",
+      "options": {
+        "model": "gpt-4o",
+        "base_url": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "timeout_seconds": 120
+      }
+    }
+  }
+}
