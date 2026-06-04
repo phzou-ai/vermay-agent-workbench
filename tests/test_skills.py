@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from mini_agent.skills import SkillStore, parse_skill_file
-from mini_agent.storage import AgentStore
+from vermay_agent.skills import SkillStore, parse_skill_file
+from vermay_agent.storage import AgentStore
 
 
 def test_skill_front_matter_parser_and_retrieval(tmp_path):

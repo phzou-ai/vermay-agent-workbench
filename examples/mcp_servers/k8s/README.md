@@ -28,13 +28,13 @@ Prompts:
 The tracked `config/mcp_servers.json` includes this server as `k8s`.
 
 ```bash
-mini-agent mcp list-tools --server k8s
-mini-agent mcp list-resources --server k8s
-mini-agent mcp list-prompts --server k8s
+vermay-agent mcp list-tools --server k8s
+vermay-agent mcp list-resources --server k8s
+vermay-agent mcp list-prompts --server k8s
 ```
 
 Use it in a run by explicitly selecting the server:
 
 ```bash
-mini-agent "check k8s status" --mcp-server k8s --mcp-prompt k8s-readonly-debug
+vermay-agent "check k8s status" --mcp-server k8s --mcp-prompt k8s-readonly-debug
 ```

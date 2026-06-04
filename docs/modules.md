@@ -2,13 +2,13 @@
 
 ## Entry Point
 
-`mini_agent/main.py`
+`vermay_agent/main.py`
 
-- Defines the `mini-agent` console entry point.
+- Defines the `vermay-agent` console entry point and keeps `mini-agent` as a compatibility alias.
 - Dispatches prompt execution or named subcommands.
 - Re-exports a small set of CLI helpers for compatibility with existing tests.
 
-`mini_agent/cli/prompt.py`
+`vermay_agent/cli/prompt.py`
 
 - Parses prompt-run CLI arguments.
 - Maps provider-specific flags and `--model-option key=value` into model provider options.
@@ -16,7 +16,7 @@
 - Handles approval resume CLI options.
 - Owns terminal-only interactive approval prompting.
 
-`mini_agent/cli/subcommands.py`
+`vermay_agent/cli/subcommands.py`
 
 - Dispatches subcommands for `serve`, memory, skills, eval replay, and MCP inspection.
 - Owns subcommand-specific argument parsing.
@@ -24,7 +24,7 @@
 
 ## API
 
-`mini_agent/api/`
+`vermay_agent/api/`
 
 - `app.py`: FastAPI app factory and HTTP route definitions.
 - `a2a/projection.py`: local projection helpers for A2A task, status, and artifact adapter work.
@@ -38,11 +38,11 @@
 
 The API layer uses `LangGraphAgentRuntime.start()` and `resume()` through task-level service methods. It accepts structured MCP task selection, stores that selection in task metadata, and reuses it on approval resume. It does not call CLI string-output helpers and does not expose raw graph state by default.
 
-A2A support belongs at this API boundary. A2A adapters call `AgentService` and use `a2a/projection.py`-style projection helpers; they should not modify the LangGraph graph topology or introduce A2A protocol concepts into `mini_agent/langgraph_runtime/`.
+A2A support belongs at this API boundary. A2A adapters call `AgentService` and use `a2a/projection.py`-style projection helpers; they should not modify the LangGraph graph topology or introduce A2A protocol concepts into `vermay_agent/langgraph_runtime/`.
 
 ## Runtime Factory
 
-`mini_agent/app_factory.py`
+`vermay_agent/app_factory.py`
 
 - Defines `RuntimeFactoryConfig`.
 - Builds the active LangGraph runtime through `build_runtime()`.
@@ -53,7 +53,7 @@ A2A support belongs at this API boundary. A2A adapters call `AgentService` and u
 
 ## LangGraph Runtime
 
-`mini_agent/langgraph_runtime/`
+`vermay_agent/langgraph_runtime/`
 
 - `state.py`: standard LangGraph state using `messages: Annotated[list[BaseMessage], add_messages]`.
 - `nodes.py`: model, permission, approval, tool-message recording, and loop-control nodes.
@@ -68,7 +68,7 @@ This package is the only active runtime path. It is the production-oriented path
 
 ## Shared Harness Components
 
-`mini_agent/`
+`vermay_agent/`
 
 - `context_builder.py`: builds the default system prompt and legacy project-message context; active runtime construction still reuses it as the source for baseline context policy text.
 - `checkpointing.py`: builds SQLite checkpointers for durable CLI approval resume.
@@ -94,20 +94,20 @@ The active tool schema source is each tool's Pydantic `args_schema`. Model adapt
 
 ## Model Adapters
 
-`mini_agent/model_clients/ollama.py`
+`vermay_agent/model_clients/ollama.py`
 
 - Calls Ollama `/api/chat`.
 - Uses a small JSON action protocol for final answers and tool calls.
 - Reads model configuration from `config/models.json` or explicit runtime overrides.
 
-`mini_agent/model_clients/openai_compatible.py`
+`vermay_agent/model_clients/openai_compatible.py`
 
 - Calls OpenAI-style `{base_url}/chat/completions` endpoints.
 - Sends Bearer authentication when `api_key` or `api_key_env` is configured.
 - Uses standard Chat Completions `tools`, `tool_choice`, assistant `tool_calls`, and `role: tool` messages with `tool_call_id`.
 - Omits `tools` and `tool_choice` when no tools are available.
 
-`mini_agent/langgraph_runtime/model_factory.py`
+`vermay_agent/langgraph_runtime/model_factory.py`
 
 - Builds provider-specific model adapters for the active runtime.
 - Accepts `ModelProviderConfig(provider, options)`.
@@ -118,14 +118,14 @@ The active tool schema source is each tool's Pydantic `args_schema`. Model adapt
 
 ## Tool Domains
 
-`mini_agent/tools/devops/`
+`vermay_agent/tools/devops/`
 
 - Local file and log inspection tools.
 - Local sample Kubernetes data tools.
 - SSH-backed read-only Kubernetes tools.
 - Dangerous tool placeholders that require approval.
 
-`mini_agent/tools/weather/`
+`vermay_agent/tools/weather/`
 
 - `weather_forecast` read-only external data tool backed by `wttr.in`.
 
@@ -133,7 +133,7 @@ Configured MCP servers are inactive by default. Runtime construction loads MCP t
 
 Explicitly selected MCP prompts and resources are read once at run start. `RuntimeContextProvider` injects them in this order: MCP prompts, local authored skills, explicit memory, MCP resources. Prompts are treated as external workflow guidance; resources are treated as untrusted external data. Prompt selections can carry explicit string arguments, which are passed to the MCP server when retrieving the prompt.
 
-`mini_agent/mcp/`
+`vermay_agent/mcp/`
 
 - `client.py`: high-level MCP client manager and compatibility aliases.
 - `config.py`: MCP server config parsing and exposure policy constants.
@@ -152,7 +152,7 @@ Explicitly selected MCP prompts and resources are read once at run start. `Runti
 
 ## Infrastructure
 
-`mini_agent/infra/ssh.py`
+`vermay_agent/infra/ssh.py`
 
 - Builds strict SSH commands from environment configuration.
 - Enforces host key checking and known hosts usage.

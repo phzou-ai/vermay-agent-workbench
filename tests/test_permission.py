@@ -1,7 +1,7 @@
-from mini_agent.permission import PermissionGate
-from mini_agent.tool_registry import ToolRegistry
-from mini_agent.tooling import ToolArgs, structured_tool
-from mini_agent.types import ToolCall
+from vermay_agent.permission import PermissionGate
+from vermay_agent.tool_registry import ToolRegistry
+from vermay_agent.tooling import ToolArgs, structured_tool
+from vermay_agent.types import ToolCall
 
 
 class EmptyArgs(ToolArgs):

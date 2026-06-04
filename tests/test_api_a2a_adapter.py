@@ -5,14 +5,14 @@ from concurrent.futures import Future
 import pytest
 from fastapi.testclient import TestClient
 
-from mini_agent.api.a2a import A2AAdapter, A2ASendMessageRequest, create_a2a_router
-from mini_agent.api.app import create_app
-from mini_agent.api.service import AgentService
-from mini_agent.api.session_models import TaskStatus
-from mini_agent.api.session_store import SessionStore
-from mini_agent.errors import InvalidRequestError, TaskNotFoundError
-from mini_agent.langgraph_runtime.results import RunResult
-from mini_agent.storage import AgentStore
+from vermay_agent.api.a2a import A2AAdapter, A2ASendMessageRequest, create_a2a_router
+from vermay_agent.api.app import create_app
+from vermay_agent.api.service import AgentService
+from vermay_agent.api.session_models import TaskStatus
+from vermay_agent.api.session_store import SessionStore
+from vermay_agent.errors import InvalidRequestError, TaskNotFoundError
+from vermay_agent.langgraph_runtime.results import RunResult
+from vermay_agent.storage import AgentStore
 
 
 class FakeRuntime:
@@ -69,7 +69,7 @@ def test_a2a_agent_card_declares_local_skeleton_capabilities(tmp_path):
 
     card = adapter.get_agent_card()
 
-    assert card["name"] == "Mini Agent Workbench"
+    assert card["name"] == "Vermay Agent Workbench"
     assert card["capabilities"] == {
         "streaming": False,
         "pushNotifications": False,

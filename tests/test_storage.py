@@ -4,8 +4,8 @@ import sqlite3
 
 import pytest
 
-from mini_agent import storage
-from mini_agent.storage import AgentStore, SchemaMigration
+from vermay_agent import storage
+from vermay_agent.storage import AgentStore, SchemaMigration
 
 
 def test_agent_store_creates_expected_tables(tmp_path):

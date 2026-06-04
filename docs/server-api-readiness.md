@@ -7,7 +7,7 @@ The project includes a local FastAPI server for agent lifecycle operations.
 Start the server:
 
 ```bash
-mini-agent serve
+vermay-agent serve
 ```
 
 Default bind address:
@@ -246,7 +246,7 @@ task_stopped
 task_failed
 ```
 
-The code-level event name contract is centralized in `mini_agent/api/task_contract.py` as `TaskEventType`.
+The code-level event name contract is centralized in `vermay_agent/api/task_contract.py` as `TaskEventType`.
 
 Task events are API-visible lifecycle data. They do not include raw model output, full prompts, raw graph state, final answer text, or full tool output.
 
@@ -314,7 +314,7 @@ The stream does not emit model tokens, raw prompts, raw graph state, or full too
 The default local API does not expose A2A routes. Start the server with explicit A2A support when needed:
 
 ```bash
-mini-agent serve --enable-a2a
+vermay-agent serve --enable-a2a
 ```
 
 When enabled, the server exposes:
@@ -340,7 +340,7 @@ task/run          -> A2A taskId
 
 `thread_id` remains a LangGraph checkpoint implementation key and is not projected as an A2A identity. Local artifact events are kept out of the status projection and can be projected separately as artifact update payloads.
 
-The A2A adapter translates A2A task/message/status requests into `AgentService` calls and projects persisted `TaskRecord`, `TaskEventRecord`, and `TaskArtifactRecord` data back into A2A payloads. It does not add A2A-specific nodes, routing, state keys, or protocol branches inside `mini_agent/langgraph_runtime/`.
+The A2A adapter translates A2A task/message/status requests into `AgentService` calls and projects persisted `TaskRecord`, `TaskEventRecord`, and `TaskArtifactRecord` data back into A2A payloads. It does not add A2A-specific nodes, routing, state keys, or protocol branches inside `vermay_agent/langgraph_runtime/`.
 
 Current projection policy:
 

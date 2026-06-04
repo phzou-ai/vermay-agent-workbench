@@ -1,12 +1,12 @@
-# Mini Agent Workbench
+# Vermay Agent Workbench
 
-Mini Agent Workbench is a Python local agent workbench for running a LangGraph-based agent with visible harness behavior: context construction, model calls, tool execution, permission checks, approval interrupts, memory, skills, evaluation replay, MCP integration, and local API sessions.
+Vermay Agent Workbench is a Python local agent workbench for running a LangGraph-based agent with visible harness behavior: context construction, model calls, tool execution, permission checks, approval interrupts, memory, skills, evaluation replay, MCP integration, and local API sessions.
 
 The default runtime uses LangGraph with LangChain standard message and tool types, including `AIMessage.tool_calls`, `ToolMessage`, `ToolNode`, and `add_messages`.
 
 ## Architecture
 
-Mini Agent Workbench is organized around three layers: external control surfaces, a task substrate, and the LangGraph runtime. The important boundary is that A2A is not the agent's core execution model. A2A is one protocol surface for exposing and interacting with agent capabilities, alongside the CLI, the local HTTP API, and future UI or webhook entry points.
+Vermay Agent Workbench is organized around three layers: external control surfaces, a task substrate, and the LangGraph runtime. The important boundary is that A2A is not the agent's core execution model. A2A is one protocol surface for exposing and interacting with agent capabilities, alongside the CLI, the local HTTP API, and future UI or webhook entry points.
 
 The Task / AgentService layer is the substrate. It owns the stable application contract: sessions, tasks, lifecycle state, events, artifacts, cancellation, retry, and resume. Protocol adapters should translate their own request and response shapes into this task model instead of reaching into LangGraph internals.
 
@@ -57,7 +57,7 @@ A useful analogy is an operating system, but not as a strict one-to-one mapping.
 
 In that analogy, `task_id` is the external job identifier, `session_id` or A2A `contextId` is the longer-lived conversation or working context, and LangGraph `thread_id` is an internal continuation/checkpoint identifier. `thread_id` should therefore be treated as runtime state, not as the public task identity.
 
-| OS/platform analogy | Mini Agent concept |
+| OS/platform analogy | Vermay concept |
 | --- | --- |
 | Shell, RPC endpoint, or UI | CLI, HTTP API, A2A adapter, future UI |
 | Process manager or job controller | `AgentService` |
@@ -141,15 +141,16 @@ python -m pip install -e .
 ## Quick Start
 
 ```bash
-mini-agent "weather forecast for Beijing"
+vermay-agent "weather forecast for Beijing"
 ```
 
 The CLI prints a compact progress transcript to stderr and the final answer to stdout.
+The legacy `mini-agent` command is still installed as a compatibility alias.
 
 Disable progress output:
 
 ```bash
-mini-agent "weather forecast for Beijing" --no-progress
+vermay-agent "weather forecast for Beijing" --no-progress
 ```
 
 ## API Server
@@ -157,7 +158,7 @@ mini-agent "weather forecast for Beijing" --no-progress
 Start the local API server:
 
 ```bash
-mini-agent serve
+vermay-agent serve
 ```
 
 Defaults:
@@ -170,13 +171,13 @@ port: 8000
 Override host or port:
 
 ```bash
-mini-agent serve --host 127.0.0.1 --port 9000
+vermay-agent serve --host 127.0.0.1 --port 9000
 ```
 
 Enable the optional local A2A routes:
 
 ```bash
-mini-agent serve --enable-a2a
+vermay-agent serve --enable-a2a
 ```
 
 Health check:
@@ -310,13 +311,13 @@ The runtime selects a configured model from `config/models.json`. The file defin
 Use the primary model:
 
 ```bash
-mini-agent "weather forecast for Beijing"
+vermay-agent "weather forecast for Beijing"
 ```
 
 Use another configured model:
 
 ```bash
-mini-agent "weather forecast for Beijing" --model local_ollama
+vermay-agent "weather forecast for Beijing" --model local_ollama
 ```
 
 API tasks can also select a configured model by name:
@@ -351,13 +352,13 @@ Dangerous tools pause the graph and require approval.
 In an interactive terminal, approval is prompted automatically:
 
 ```bash
-mini-agent "apply this kubernetes manifest: ..."
+vermay-agent "apply this kubernetes manifest: ..."
 ```
 
 Manual resume is available for low-level local checkpoint workflows:
 
 ```bash
-mini-agent --thread-id <thread-id> --resume-approval true --approval-reason "approved by operator"
+vermay-agent --thread-id <thread-id> --resume-approval true --approval-reason "approved by operator"
 ```
 
 This CLI path resumes the internal LangGraph checkpoint directly by `thread_id`. API and A2A surfaces resume work through the externally visible `task_id`.
@@ -369,9 +370,9 @@ LangGraph checkpoints are stored under `data/checkpoints/`.
 Memory is written explicitly by command. Enabled memory can be injected into later runs when it matches the request.
 
 ```bash
-mini-agent memory add "Prefer read-only Kubernetes inspection first." --tag k8s --tag preference
-mini-agent memory list
-mini-agent memory disable 1
+vermay-agent memory add "Prefer read-only Kubernetes inspection first." --tag k8s --tag preference
+vermay-agent memory list
+vermay-agent memory disable 1
 ```
 
 Memory metadata is stored in `data/agent.sqlite`.
@@ -394,10 +395,10 @@ Prefer read-only inspection before proposing a fix.
 Common commands:
 
 ```bash
-mini-agent skills list
-mini-agent skills show kubernetes-readonly-debug
-mini-agent skills propose-from-trace --trace traces/latest.jsonl
-mini-agent skills approve <proposal-id>
+vermay-agent skills list
+vermay-agent skills show kubernetes-readonly-debug
+vermay-agent skills propose-from-trace --trace traces/latest.jsonl
+vermay-agent skills approve <proposal-id>
 ```
 
 Approved skills live in `skills/`. Generated proposals live in `data/skill_proposals/`.
@@ -407,9 +408,9 @@ Approved skills live in `skills/`. Generated proposals live in `data/skill_propo
 Replay evaluates a recorded trace or scenario without executing a live model or live tools.
 
 ```bash
-mini-agent eval replay --trace traces/latest.jsonl
-mini-agent eval replay --scenario evals/scenarios/weather.json
-mini-agent eval list-runs
+vermay-agent eval replay --trace traces/latest.jsonl
+vermay-agent eval replay --scenario evals/scenarios/weather.json
+vermay-agent eval list-runs
 ```
 
 Run metadata is stored in `data/agent.sqlite`. Full reports are written to `data/eval_runs/`.
@@ -421,20 +422,20 @@ MCP client configuration lives in `config/mcp_servers.json`.
 List configured MCP servers and capabilities:
 
 ```bash
-mini-agent mcp list-servers
-mini-agent mcp list-tools
-mini-agent mcp list-tools --server k8s
-mini-agent mcp list-resources --server k8s
-mini-agent mcp list-prompts --server k8s
+vermay-agent mcp list-servers
+vermay-agent mcp list-tools
+vermay-agent mcp list-tools --server k8s
+vermay-agent mcp list-resources --server k8s
+vermay-agent mcp list-prompts --server k8s
 ```
 
 Configured MCP servers are inactive by default during agent runs. Select a server explicitly:
 
 ```bash
-mini-agent "check k8s status" --mcp-server k8s
-mini-agent "check service status" --mcp-server k8s --mcp-resource k8s://cluster/services
-mini-agent "debug service health" --mcp-server k8s --mcp-prompt k8s-service-health-check
-mini-agent "debug phzou-core service" --mcp-server k8s --mcp-prompt 'k8s-service-health-check?service=phzou-core&namespace=default'
+vermay-agent "check k8s status" --mcp-server k8s
+vermay-agent "check service status" --mcp-server k8s --mcp-resource k8s://cluster/services
+vermay-agent "debug service health" --mcp-server k8s --mcp-prompt k8s-service-health-check
+vermay-agent "debug phzou-core service" --mcp-server k8s --mcp-prompt 'k8s-service-health-check?service=phzou-core&namespace=default'
 ```
 
 Selected MCP tools are wrapped as LangChain `StructuredTool` instances with namespaced model-facing names such as `mcp__k8s__kubectl_get`. MCP tools require approval by default unless the server or tool is marked read-only in config.

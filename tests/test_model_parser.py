@@ -1,5 +1,5 @@
-from mini_agent.model_clients.ollama import OllamaModelClient
-from mini_agent.types import Message
+from vermay_agent.model_clients.ollama import OllamaModelClient
+from vermay_agent.types import Message
 
 
 def parse(content: str):

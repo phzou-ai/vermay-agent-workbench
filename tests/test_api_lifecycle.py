@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from mini_agent.api.lifecycle import LifecycleContext, TraceLifecycleObserver, lifecycle_payload
-from mini_agent.trace import TraceLogger
+from vermay_agent.api.lifecycle import LifecycleContext, TraceLifecycleObserver, lifecycle_payload
+from vermay_agent.trace import TraceLogger
 
 
 def test_lifecycle_payload_is_compact():

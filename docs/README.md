@@ -1,8 +1,8 @@
-# Mini Agent Workbench Documentation
+# Vermay Agent Workbench Documentation
 
 ## Scope
 
-This directory contains stable project-facing documentation for Mini Agent Workbench.
+This directory contains stable project-facing documentation for Vermay Agent Workbench.
 
 The project is positioned as an agent validation and practice workbench. It provides a concrete runtime for testing agent orchestration, tool execution, approval control, memory, skills, evaluation replay, model adapters, MCP client integration, local API integration, and real-world tool patterns.
 

@@ -6,14 +6,14 @@ from concurrent.futures import Future
 
 import pytest
 
-from mini_agent.api.session_models import TaskStatus
-from mini_agent.api.service import AgentService, AgentStartOptions, SessionConflictError, TaskExecutionLocks
-from mini_agent.api.session_store import SessionStore
-from mini_agent.app_factory import RuntimeFactoryConfig
-from mini_agent.langgraph_runtime import ModelProviderConfig
-from mini_agent.langgraph_runtime.results import RunResult
-from mini_agent.mcp.selection import MCPPromptSelectionConfig, MCPResourceSelectionConfig, MCPSelectionConfig
-from mini_agent.storage import AgentStore
+from vermay_agent.api.session_models import TaskStatus
+from vermay_agent.api.service import AgentService, AgentStartOptions, SessionConflictError, TaskExecutionLocks
+from vermay_agent.api.session_store import SessionStore
+from vermay_agent.app_factory import RuntimeFactoryConfig
+from vermay_agent.langgraph_runtime import ModelProviderConfig
+from vermay_agent.langgraph_runtime.results import RunResult
+from vermay_agent.mcp.selection import MCPPromptSelectionConfig, MCPResourceSelectionConfig, MCPSelectionConfig
+from vermay_agent.storage import AgentStore
 
 
 class FakeRuntime:

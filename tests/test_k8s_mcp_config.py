@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from mini_agent.mcp.client import MCPClientManager
+from vermay_agent.mcp.client import MCPClientManager
 
 
 def test_tracked_k8s_mcp_config_discovers_example_server_capabilities():

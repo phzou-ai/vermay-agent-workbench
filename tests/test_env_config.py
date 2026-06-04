@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from mini_agent.env_config import load_prefixed_env, parse_env_file
+from vermay_agent.env_config import load_prefixed_env, parse_env_file
 
 
 def test_parse_env_file_filters_prefix_and_strips_quotes(tmp_path: Path):

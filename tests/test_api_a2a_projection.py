@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from mini_agent.api.a2a.projection import (
+from vermay_agent.api.a2a.projection import (
     A2AProjectionKind,
     A2ATaskState,
     is_terminal_a2a_state,
@@ -12,8 +12,8 @@ from mini_agent.api.a2a.projection import (
     project_task_artifact_event,
     project_task_event,
 )
-from mini_agent.api.session_models import TaskStatus
-from mini_agent.api.session_store import TaskArtifactRecord, TaskEventRecord, TaskRecord
+from vermay_agent.api.session_models import TaskStatus
+from vermay_agent.api.session_store import TaskArtifactRecord, TaskEventRecord, TaskRecord
 
 
 def test_a2a_status_mapping_covers_current_local_task_statuses():

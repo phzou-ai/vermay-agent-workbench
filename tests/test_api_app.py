@@ -7,13 +7,13 @@ from dataclasses import dataclass
 
 from fastapi.testclient import TestClient
 
-from mini_agent.api.app import create_app
-from mini_agent.api.service import AgentService
-from mini_agent.api.session_store import SessionStore
-from mini_agent.app_factory import RuntimeFactoryConfig
-from mini_agent.langgraph_runtime.results import RunResult
-from mini_agent.mcp.transport import MCPTransportError
-from mini_agent.storage import AgentStore
+from vermay_agent.api.app import create_app
+from vermay_agent.api.service import AgentService
+from vermay_agent.api.session_store import SessionStore
+from vermay_agent.app_factory import RuntimeFactoryConfig
+from vermay_agent.langgraph_runtime.results import RunResult
+from vermay_agent.mcp.transport import MCPTransportError
+from vermay_agent.storage import AgentStore
 
 
 SESSION_RESPONSE_KEYS = {

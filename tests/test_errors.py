@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from mini_agent.errors import (
+from vermay_agent.errors import (
     AgentError,
     AgentErrorCode,
     InvalidRequestError,
@@ -11,7 +11,7 @@ from mini_agent.errors import (
     TaskNotFoundError,
     error_info_from_exception,
 )
-from mini_agent.mcp.transport import MCPTransportError
+from vermay_agent.mcp.transport import MCPTransportError
 
 
 def test_error_info_uses_typed_agent_error_metadata():

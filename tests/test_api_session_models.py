@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from mini_agent.api.session_models import (
+from vermay_agent.api.session_models import (
     TaskStatus,
     is_active,
     is_cancelable,
@@ -9,13 +9,13 @@ from mini_agent.api.session_models import (
     normalize_task_status,
     status_from_run_result,
 )
-from mini_agent.api.task_contract import (
+from vermay_agent.api.task_contract import (
     ARTIFACT_TASK_EVENT_TYPES,
     INTERNAL_A2A_TASK_EVENT_TYPES,
     TERMINAL_TASK_EVENT_TYPES,
     TaskEventType,
 )
-from mini_agent.langgraph_runtime.results import RunResult
+from vermay_agent.langgraph_runtime.results import RunResult
 
 
 def test_task_status_normalization_accepts_known_values():

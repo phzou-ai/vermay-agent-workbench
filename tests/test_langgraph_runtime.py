@@ -3,27 +3,27 @@ from __future__ import annotations
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from pydantic import Field
 
-from mini_agent.checkpointing import build_sqlite_checkpointer
-from mini_agent.model_clients import OllamaModelClient
-from mini_agent.permission import PermissionGate
-from mini_agent.progress import ProgressReporter
-from mini_agent.langgraph_runtime import ModelInvocation, OllamaModelAdapter
-from mini_agent.langgraph_runtime.graph import build_graph
-from mini_agent.langgraph_runtime.model_factory import ModelProviderConfig, build_model_client
-from mini_agent.langgraph_runtime.nodes import GraphComponents
-from mini_agent.langgraph_runtime.routing import (
+from vermay_agent.checkpointing import build_sqlite_checkpointer
+from vermay_agent.model_clients import OllamaModelClient
+from vermay_agent.permission import PermissionGate
+from vermay_agent.progress import ProgressReporter
+from vermay_agent.langgraph_runtime import ModelInvocation, OllamaModelAdapter
+from vermay_agent.langgraph_runtime.graph import build_graph
+from vermay_agent.langgraph_runtime.model_factory import ModelProviderConfig, build_model_client
+from vermay_agent.langgraph_runtime.nodes import GraphComponents
+from vermay_agent.langgraph_runtime.routing import (
     latest_ai_message,
     route_after_approval,
     route_after_model,
     route_after_permission,
     route_loop_limit,
 )
-from mini_agent.langgraph_runtime.runner import LangGraphAgentRuntime
-from mini_agent.langgraph_runtime.state import build_initial_state
-from mini_agent.tooling import ToolArgs, structured_tool
-from mini_agent.tool_schema import tool_schemas_from_tools
-from mini_agent.tool_registry import ToolRegistry
-from mini_agent.trace import TraceLogger
+from vermay_agent.langgraph_runtime.runner import LangGraphAgentRuntime
+from vermay_agent.langgraph_runtime.state import build_initial_state
+from vermay_agent.tooling import ToolArgs, structured_tool
+from vermay_agent.tool_schema import tool_schemas_from_tools
+from vermay_agent.tool_registry import ToolRegistry
+from vermay_agent.trace import TraceLogger
 
 
 class EchoArgs(ToolArgs):

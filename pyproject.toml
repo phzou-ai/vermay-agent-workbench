@@ -3,9 +3,9 @@ requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "mini-agent-workbench"
+name = "vermay-agent-workbench"
 version = "0.1.0"
-description = "A Python agent workbench for validating LangGraph orchestration, tool execution, approval, and observability patterns."
+description = "An experimental local workbench for task-based, resumable agents."
 requires-python = ">=3.11"
 dependencies = [
     "rich>=13.7",
@@ -19,7 +19,8 @@ dependencies = [
 ]
 
 [project.scripts]
-mini-agent = "mini_agent.main:main"
+vermay-agent = "vermay_agent.main:main"
+mini-agent = "vermay_agent.main:main"
 
 [tool.setuptools.packages.find]
-include = ["mini_agent*"]
+include = ["vermay_agent*", "mini_agent"]

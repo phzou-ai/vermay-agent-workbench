@@ -1,4 +1,4 @@
-from mini_agent.model_clients.ollama import OllamaModelClient
+from vermay_agent.model_clients.ollama import OllamaModelClient
 from urllib.error import HTTPError
 from io import BytesIO
 

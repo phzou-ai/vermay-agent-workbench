@@ -1,6 +1,6 @@
 import pytest
 
-from mini_agent.tools.devops import remote_kubernetes
+from vermay_agent.tools.devops import remote_kubernetes
 
 
 def test_remote_kubectl_command_tries_kubectl_and_microk8s():

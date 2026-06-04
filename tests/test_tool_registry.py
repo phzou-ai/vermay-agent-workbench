@@ -1,10 +1,10 @@
 import pytest
 from pydantic import Field
 
-from mini_agent.tool_registry import ToolRegistry
-from mini_agent.tooling import ToolArgs, structured_tool
-from mini_agent.tools.devops import register_devops_tools
-from mini_agent.tools.devops.constants import (
+from vermay_agent.tool_registry import ToolRegistry
+from vermay_agent.tooling import ToolArgs, structured_tool
+from vermay_agent.tools.devops import register_devops_tools
+from vermay_agent.tools.devops.constants import (
     KUBECTL_DESCRIBE_RESOURCES,
     KUBECTL_GET_RESOURCES,
     MOCK_KUBECTL_GET_RESOURCES,

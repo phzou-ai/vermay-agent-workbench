@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Mini Agent Workbench is a Python agent runtime for validating agent system behavior in realistic command-line and local API workflows.
+Vermay Agent Workbench is a Python agent runtime for validating agent system behavior in realistic command-line and local API workflows.
 
 The current implementation focuses on:
 
@@ -28,7 +28,7 @@ The current implementation focuses on:
 
 ## Current Runtime Position
 
-The CLI runtime is `mini_agent/langgraph_runtime/`.
+The CLI runtime is `vermay_agent/langgraph_runtime/`.
 
 The earlier hands-on runtime has been archived under `archive/hands_on_langgraph_runtime/`. It remains useful as historical reference material for explicit harness mechanics, but it is not an active runtime path.
 
@@ -65,7 +65,7 @@ CLI input
 - API artifact events are compact references and do not include final answer text.
 - API lifecycle events are compact service-level records written through a lifecycle observer; they do not include raw user input, model output, graph state, final answer text, or full tool output.
 - API task/status/artifact metadata has local A2A projection helpers. A2A routes are not exposed by default and are available only when the server is started with `--enable-a2a`.
-- Optional A2A routes can be enabled explicitly with `mini-agent serve --enable-a2a`; they remain an API-edge adapter and do not alter LangGraph runtime internals.
+- Optional A2A routes can be enabled explicitly with `vermay-agent serve --enable-a2a`; they remain an API-edge adapter and do not alter LangGraph runtime internals.
 - The local metadata schema currently records version `6` through ordered schema migrations.
 - API lifecycle errors are classified through a shared project error taxonomy before response mapping and failed-task persistence.
 - Local trace outputs are not intended for Git.

@@ -13,17 +13,17 @@ python -m pip install -e .
 ## Run
 
 ```bash
-mini-agent "weather forecast for Beijing"
+vermay-agent "weather forecast for Beijing"
 ```
 
-The CLI uses `mini_agent/langgraph_runtime/`. No alternate runtime is exposed through the active CLI.
+The CLI uses `vermay_agent/langgraph_runtime/`. No alternate runtime is exposed through the active CLI.
 
 ## API Server
 
 Start the local FastAPI server:
 
 ```bash
-mini-agent serve
+vermay-agent serve
 ```
 
 Default bind address:
@@ -35,7 +35,7 @@ Default bind address:
 Use a different port:
 
 ```bash
-mini-agent serve --host 127.0.0.1 --port 9000
+vermay-agent serve --host 127.0.0.1 --port 9000
 ```
 
 Available endpoints:
@@ -128,19 +128,19 @@ Ollama model settings live in `config/models.json` under the selected model's `o
 Use the primary model:
 
 ```bash
-mini-agent "weather forecast for Beijing"
+vermay-agent "weather forecast for Beijing"
 ```
 
 Use another configured model:
 
 ```bash
-mini-agent "weather forecast for Beijing" --model local_ollama
+vermay-agent "weather forecast for Beijing" --model local_ollama
 ```
 
 Provider-specific CLI override example:
 
 ```bash
-mini-agent "weather forecast for Beijing" \
+vermay-agent "weather forecast for Beijing" \
   --model-provider ollama \
   --ollama-model qwen3.6:27b \
   --ollama-base-url http://127.0.0.1:11434 \
@@ -150,7 +150,7 @@ mini-agent "weather forecast for Beijing" \
 Advanced model provider options can be passed as repeated flat `key=value` pairs:
 
 ```bash
-mini-agent "weather forecast for Beijing" \
+vermay-agent "weather forecast for Beijing" \
   --model-provider ollama \
   --model-option model=deepseek-v4-flash:cloud \
   --model-option timeout_seconds=120
@@ -162,12 +162,12 @@ mini-agent "weather forecast for Beijing" \
 
 `timeout_seconds` must be a positive integer.
 
-The CLI maps configured model selections or provider override flags into `ModelProviderConfig(provider, options)`. Runtime assembly lives in `mini_agent/app_factory.py`; provider-specific model construction lives in `mini_agent/langgraph_runtime/model_factory.py`.
+The CLI maps configured model selections or provider override flags into `ModelProviderConfig(provider, options)`. Runtime assembly lives in `vermay_agent/app_factory.py`; provider-specific model construction lives in `vermay_agent/langgraph_runtime/model_factory.py`.
 
 OpenAI-compatible endpoint example:
 
 ```bash
-mini-agent "weather forecast for Beijing" \
+vermay-agent "weather forecast for Beijing" \
   --model-provider openai_compatible \
   --model-option model=qwen \
   --model-option base_url=http://localhost:8000/v1
@@ -182,9 +182,9 @@ Ollama remains separate and uses the project's JSON action protocol rather than 
 Memory writes are explicit:
 
 ```bash
-mini-agent memory add "Prefer read-only Kubernetes inspection first." --tag k8s --tag preference
-mini-agent memory list
-mini-agent memory disable 1
+vermay-agent memory add "Prefer read-only Kubernetes inspection first." --tag k8s --tag preference
+vermay-agent memory list
+vermay-agent memory disable 1
 ```
 
 Enabled memory is selected by deterministic keyword, tag, and latest-item matching and injected as system context before the user message.
@@ -194,10 +194,10 @@ Enabled memory is selected by deterministic keyword, tag, and latest-item matchi
 Authored skills are markdown files under `skills/` with front matter fields `name`, `description`, `triggers`, and `version`.
 
 ```bash
-mini-agent skills list
-mini-agent skills show kubernetes-readonly-debug
-mini-agent skills propose-from-trace --trace traces/latest.jsonl
-mini-agent skills approve <proposal-id>
+vermay-agent skills list
+vermay-agent skills show kubernetes-readonly-debug
+vermay-agent skills propose-from-trace --trace traces/latest.jsonl
+vermay-agent skills approve <proposal-id>
 ```
 
 Generated skills remain proposals under `data/skill_proposals/` until approved.
@@ -207,9 +207,9 @@ Generated skills remain proposals under `data/skill_proposals/` until approved.
 Replay uses recorded trace or scenario data only. It does not execute a live model, live SSH, MCP, or dangerous tools.
 
 ```bash
-mini-agent eval replay --trace traces/latest.jsonl
-mini-agent eval replay --scenario evals/scenarios/weather.json
-mini-agent eval list-runs
+vermay-agent eval replay --trace traces/latest.jsonl
+vermay-agent eval replay --scenario evals/scenarios/weather.json
+vermay-agent eval list-runs
 ```
 
 Eval metadata is stored in `data/agent.sqlite`; full reports are written under `data/eval_runs/`.
@@ -219,11 +219,11 @@ Eval metadata is stored in `data/agent.sqlite`; full reports are written under `
 MCP client configuration lives in `config/mcp_servers.json`.
 
 ```bash
-mini-agent mcp list-servers
-mini-agent mcp list-tools
-mini-agent mcp list-tools --server k8s
-mini-agent mcp list-resources --server k8s
-mini-agent mcp list-prompts --server k8s
+vermay-agent mcp list-servers
+vermay-agent mcp list-tools
+vermay-agent mcp list-tools --server k8s
+vermay-agent mcp list-resources --server k8s
+vermay-agent mcp list-prompts --server k8s
 ```
 
 Configured MCP servers are inactive during normal agent runs until selected with `--mcp-server`. MCP tools are approval-required by default. A server or individual tool must be explicitly marked read-only in config to bypass approval.
@@ -231,9 +231,9 @@ Configured MCP servers are inactive during normal agent runs until selected with
 Selected MCP prompts and resources can be injected as bounded context:
 
 ```bash
-mini-agent "debug service health" --mcp-server k8s --mcp-prompt k8s-service-health-check
-mini-agent "debug phzou-core service" --mcp-server k8s --mcp-prompt 'k8s-service-health-check?service=phzou-core&namespace=default'
-mini-agent "check service status" --mcp-server k8s --mcp-resource k8s://cluster/services
+vermay-agent "debug service health" --mcp-server k8s --mcp-prompt k8s-service-health-check
+vermay-agent "debug phzou-core service" --mcp-server k8s --mcp-prompt 'k8s-service-health-check?service=phzou-core&namespace=default'
+vermay-agent "check service status" --mcp-server k8s --mcp-resource k8s://cluster/services
 ```
 
 Prompts and resources are read once at run start. Prompts are injected as external workflow guidance before local skills, memory, and resources. Resources are injected as external data after local memory. Prompt arguments use query-string syntax after the prompt name. When multiple MCP servers are selected, use qualified forms such as `--mcp-prompt 'k8s:k8s-service-health-check?service=phzou-core'` and `--mcp-resource k8s:k8s://cluster/services`.
@@ -245,7 +245,7 @@ A local `k8s` MCP test example lives under `examples/mcp_servers/k8s/` and expos
 `--trace` accepts a filename or relative subpath under `traces/`:
 
 ```bash
-mini-agent "weather forecast for Beijing" --trace runs/latest.jsonl
+vermay-agent "weather forecast for Beijing" --trace runs/latest.jsonl
 ```
 
 Absolute paths are allowed for debugging and tests. Relative paths cannot escape `traces/`.
@@ -257,7 +257,7 @@ Dangerous tools require approval and pause the graph through LangGraph interrupt
 In an interactive terminal, the default command prompts for approval and resumes automatically:
 
 ```bash
-mini-agent "run a dangerous operation"
+vermay-agent "run a dangerous operation"
 ```
 
 The CLI runtime stores LangGraph checkpoints in:
@@ -269,8 +269,8 @@ data/checkpoints/langgraph.sqlite
 This makes manual resume durable across CLI processes:
 
 ```bash
-mini-agent "run a dangerous operation" --thread-id approval-session
-mini-agent --thread-id approval-session --resume-approval true --approval-reason "approved by operator"
+vermay-agent "run a dangerous operation" --thread-id approval-session
+vermay-agent --thread-id approval-session --resume-approval true --approval-reason "approved by operator"
 ```
 
 Interactive approval asks at most once per run by default. If the model requests another dangerous tool after approval, the run stops instead of repeatedly prompting.
@@ -293,7 +293,7 @@ The terminal transcript is for scanability. It is not the durable audit log and 
 Disable progress output:
 
 ```bash
-mini-agent "weather forecast for Beijing" --no-progress
+vermay-agent "weather forecast for Beijing" --no-progress
 ```
 
 ## JSONL Traces

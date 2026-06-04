@@ -6,18 +6,18 @@ This document describes the current approval interrupt and resume flow in the La
 
 The implementation is centered on:
 
-- `mini_agent/langgraph_runtime/runner.py`
-- `mini_agent/langgraph_runtime/nodes.py`
-- `mini_agent/langgraph_runtime/graph.py`
+- `vermay_agent/langgraph_runtime/runner.py`
+- `vermay_agent/langgraph_runtime/nodes.py`
+- `vermay_agent/langgraph_runtime/graph.py`
 
 ## Runtime Entry
 
-The console entry point in `mini_agent/main.py` dispatches prompt execution to `mini_agent/cli/prompt.py`. Prompt execution builds the LangGraph runtime through `build_runtime()` in `mini_agent/app_factory.py`.
+The console entry point in `vermay_agent/main.py` dispatches prompt execution to `vermay_agent/cli/prompt.py`. Prompt execution builds the LangGraph runtime through `build_runtime()` in `vermay_agent/app_factory.py`.
 
 Default execution path:
 
 ```text
-mini-agent "<prompt>"
+vermay-agent "<prompt>"
   -> main()
   -> run_prompt()
   -> build_runtime()
@@ -28,7 +28,7 @@ mini-agent "<prompt>"
 Manual approval resume path:
 
 ```text
-mini-agent --thread-id <id> --resume-approval true
+vermay-agent --thread-id <id> --resume-approval true
   -> main()
   -> run_prompt()
   -> build_runtime()
@@ -159,13 +159,13 @@ The interactive approval wrapper uses the returned `RunResult` as control flow. 
 Manual resume uses:
 
 ```bash
-mini-agent --thread-id <id> --resume-approval true
+vermay-agent --thread-id <id> --resume-approval true
 ```
 
 or:
 
 ```bash
-mini-agent --thread-id <id> --resume-approval false
+vermay-agent --thread-id <id> --resume-approval false
 ```
 
 The runtime calls:

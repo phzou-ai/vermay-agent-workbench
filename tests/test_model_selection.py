@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from mini_agent.model_selection import resolve_model_selection
+from vermay_agent.model_selection import resolve_model_selection
 
 
 def write_models_config(path: Path) -> None:

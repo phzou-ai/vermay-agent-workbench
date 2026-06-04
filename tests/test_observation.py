@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from mini_agent.observation import ObservationHandler
-from mini_agent.types import ToolResult
+from vermay_agent.observation import ObservationHandler
+from vermay_agent.types import ToolResult
 
 
 def test_observation_formats_successful_string_output():

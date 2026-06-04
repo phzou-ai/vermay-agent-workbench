@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from mini_agent.api.session_models import TaskStatus
-from mini_agent.api.session_store import SessionStore
-from mini_agent.langgraph_runtime.results import RunResult
-from mini_agent.storage import AgentStore
+from vermay_agent.api.session_models import TaskStatus
+from vermay_agent.api.session_store import SessionStore
+from vermay_agent.langgraph_runtime.results import RunResult
+from vermay_agent.storage import AgentStore
 
 
 def test_session_store_persists_session_task_and_events_across_reopening(tmp_path):

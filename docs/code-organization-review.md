@@ -4,10 +4,10 @@
 
 This review focuses on the active project path:
 
-- `mini_agent/main.py`
-- `mini_agent/app_factory.py`
-- `mini_agent/langgraph_runtime/`
-- shared harness modules under `mini_agent/`
+- `vermay_agent/main.py`
+- `vermay_agent/app_factory.py`
+- `vermay_agent/langgraph_runtime/`
+- shared harness modules under `vermay_agent/`
 - active tests under `tests/`
 
 The archived hands-on runtime is outside the active maintenance path and should not drive new architecture decisions.
@@ -17,7 +17,7 @@ The archived hands-on runtime is outside the active maintenance path and should 
 The project now has one active runtime:
 
 ```text
-mini_agent/langgraph_runtime/
+vermay_agent/langgraph_runtime/
 ```
 
 This runtime uses standard LangChain / LangGraph data structures and `ToolNode`. The earlier explicit harness runtime has been moved to:
@@ -34,14 +34,14 @@ This removes the main structural ambiguity in the project. Future work should ex
 
 Responsibilities:
 
-- provide the `mini-agent` console entry point
-- route prompt execution to `mini_agent/cli/prompt.py`
-- route named subcommands to `mini_agent/cli/subcommands.py`
+- provide the `vermay-agent` console entry point and keep `mini-agent` as a compatibility alias
+- route prompt execution to `vermay_agent/cli/prompt.py`
+- route named subcommands to `vermay_agent/cli/subcommands.py`
 - keep compatibility re-exports while tests and downstream imports migrate
 
 Current status: thin dispatcher.
 
-### `mini_agent/cli/`
+### `vermay_agent/cli/`
 
 Responsibilities:
 
@@ -65,7 +65,7 @@ Responsibilities:
 
 Current status: active runtime assembly boundary.
 
-### `mini_agent/langgraph_runtime/`
+### `vermay_agent/langgraph_runtime/`
 
 Responsibilities:
 
@@ -85,7 +85,7 @@ Watch point:
 Potential future split:
 
 ```text
-mini_agent/langgraph_runtime/
+vermay_agent/langgraph_runtime/
   nodes/
     model.py
     permission.py
@@ -97,7 +97,7 @@ mini_agent/langgraph_runtime/
 
 Do not split this until there is a concrete maintenance trigger.
 
-### `mini_agent/api/`
+### `vermay_agent/api/`
 
 Responsibilities:
 
@@ -113,7 +113,7 @@ Current status: active API/service boundary.
 Recent stabilization:
 
 ```text
-mini_agent/api/task_execution.py
+vermay_agent/api/task_execution.py
   TaskExecutionService
   TaskExecutionLocks
   TaskEventNotifier
@@ -197,8 +197,8 @@ They intentionally avoid the `test_` filename prefix so default pytest does not 
 ## Recommended Cleanup Order
 
 1. Keep a single active CLI runtime.
-2. Keep active docs aligned with `mini_agent/langgraph_runtime/`.
-3. Keep prompt and subcommand CLI logic under `mini_agent/cli/`.
+2. Keep active docs aligned with `vermay_agent/langgraph_runtime/`.
+3. Keep prompt and subcommand CLI logic under `vermay_agent/cli/`.
 4. Keep archived runtime out of main test and CLI paths.
 5. Split `langgraph_runtime/nodes.py` only when new runtime capabilities make the file materially harder to maintain.
 6. Keep server/API work on explicit durable checkpoint injection rather than direct-constructor in-memory defaults.

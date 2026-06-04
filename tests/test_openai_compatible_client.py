@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from mini_agent.model_clients.openai_compatible import OpenAICompatibleModelClient
-from mini_agent.types import Message
+from vermay_agent.model_clients.openai_compatible import OpenAICompatibleModelClient
+from vermay_agent.types import Message
 
 
 class FakeResponse:

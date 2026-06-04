@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from mini_agent.infra import ssh as ssh_module
-from mini_agent.infra.ssh import SshClient
+from vermay_agent.infra import ssh as ssh_module
+from vermay_agent.infra.ssh import SshClient
 
 
 def test_ssh_client_loads_env_local_config(tmp_path: Path, monkeypatch):
