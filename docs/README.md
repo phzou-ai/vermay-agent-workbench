@@ -22,3 +22,9 @@ Repository docs should describe the current project and its stable module bounda
 Historical planning notes, batch implementation records, and broader roadmap material are kept outside this repository in the companion `mini-agent-docs` workspace.
 
 Archived implementation material retained in this repository is kept under `archive/` and is not part of the active runtime or default test suite.
+
+## Naming Boundary
+
+The current project name is Vermay Agent Workbench. The active Python package is `vermay_agent`, and the preferred CLI command is `vermay-agent`.
+
+The legacy `mini-agent` command and `mini_agent` import namespace remain compatibility aliases during the migration. The external planning workspace is still named `mini-agent-docs` for now, so path references to that directory are intentional.
