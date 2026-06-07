@@ -1,12 +1,12 @@
 # Vermay Agent Workbench
 
-Vermay Agent Workbench is a Python local agent workbench for running a LangGraph-based agent with visible harness behavior: context construction, model calls, tool execution, permission checks, approval interrupts, memory, skills, evaluation replay, MCP integration, and local API sessions.
+Vermay Agent Workbench is a Python local agent workbench for running a LangGraph-based agent with visible harness behavior: context construction, model calls, tool execution, permission checks, approval interrupts, memory, skills, evaluation replay, MCP integration, and an A2A-first main-agent service surface.
 
 The default runtime uses LangGraph with LangChain standard message and tool types, including `AIMessage.tool_calls`, `ToolMessage`, `ToolNode`, and `add_messages`.
 
 ## Architecture
 
-Vermay Agent Workbench is organized around three layers: external control surfaces, a task substrate, and the LangGraph runtime. The important boundary is that A2A is not the agent's core execution model. A2A is one protocol surface for exposing and interacting with agent capabilities, alongside the CLI, the local HTTP API, and future UI or webhook entry points.
+Vermay Agent Workbench is organized around three layers: external control surfaces, a task substrate, and the LangGraph runtime. The service boundary is now A2A-first: external Web UI and service clients should use the A2A root routes or `/rpc`. The important internal boundary is that A2A is still not embedded inside the LangGraph execution model; protocol adapters translate into the main-agent/task substrate instead of leaking raw graph state.
 
 The Task / AgentService layer is the substrate. It owns the stable application contract: sessions, tasks, lifecycle state, events, artifacts, cancellation, retry, and resume. Protocol adapters should translate their own request and response shapes into this task model instead of reaching into LangGraph internals.
 
@@ -125,8 +125,9 @@ sequenceDiagram
 - Trace and scenario replay for evaluation.
 - Ollama and OpenAI-compatible model adapters with named model selection.
 - MCP client integration for explicitly selected tools, resources, and prompts.
-- Local FastAPI server for agent session and task lifecycle.
-- Optional local A2A-compatible task routes.
+- Local FastAPI server for the A2A-first main-agent surface.
+- A2A root routes plus a dedicated single-request `/rpc` JSON-RPC endpoint.
+- Main-agent management APIs for Web UI context, message, task, route, delegation, and registered-agent inspection.
 
 ## Install
 
@@ -174,7 +175,7 @@ Override host or port:
 vermay-agent serve --host 127.0.0.1 --port 9000
 ```
 
-Enable the optional local A2A routes:
+Enable the A2A-first main-agent routes:
 
 ```bash
 vermay-agent serve --enable-a2a
@@ -186,98 +187,90 @@ Health check:
 curl http://127.0.0.1:8000/health
 ```
 
-Local lifecycle endpoints are under `/api`. A2A protocol routes stay at the protocol root only when enabled.
+The service is local-only by default and does not add authentication. Bind it carefully if exposing it outside the local machine.
 
-Create a session:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/sessions \
-  -H 'Content-Type: application/json' \
-  -d '{"title":"Ops session"}'
-```
-
-Start a task in a session:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/sessions/<session-id>/tasks \
-  -H 'Content-Type: application/json' \
-  -d '{"input":"weather forecast for Beijing"}'
-```
-
-By default the request waits for the task to finish or interrupt. For long-running work, set `wait` to `false` and inspect the task later:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/sessions/<session-id>/tasks \
-  -H 'Content-Type: application/json' \
-  -d '{"input":"weather forecast for Beijing","wait":false}'
-```
-
-Start a task with explicit MCP selection:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/sessions/<session-id>/tasks \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "input": "debug service health",
-    "mcp": {
-      "servers": ["k8s"],
-      "prompts": [{"server": "k8s", "name": "k8s-service-health-check"}],
-      "resources": [{"server": "k8s", "uri": "k8s://cluster/services"}]
-    }
-  }'
-```
-
-Inspect a task:
-
-```bash
-curl http://127.0.0.1:8000/api/tasks/<task-id>
-```
-
-Stream task lifecycle events:
-
-```bash
-curl -N http://127.0.0.1:8000/api/tasks/<task-id>/stream
-```
-
-Cancel a task:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/tasks/<task-id>/cancel \
-  -H 'Content-Type: application/json' \
-  -d '{"reason":"operator requested"}'
-```
-
-Retry a completed, failed, stopped, or canceled task as a new task:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/tasks/<task-id>/retry \
-  -H 'Content-Type: application/json' \
-  -d '{"reason":"try again"}'
-```
-
-Resume an approval interrupt:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/tasks/<task-id>/resume \
-  -H 'Content-Type: application/json' \
-  -d '{"approved":true,"reason":"approved by operator"}'
-```
-
-The API is local-only by default and does not add authentication. Bind it carefully if exposing it outside the local machine.
-
-API MCP selection uses structured objects and is stored as task metadata. Approval resume reuses the same selected MCP servers, prompts, and resources.
-
-When A2A routes are enabled, the local server also exposes:
+When A2A routes are enabled, the public service boundary is:
 
 ```text
 GET  /.well-known/agent-card.json
+POST /rpc
 POST /message:send
+POST /message:stream
 GET  /tasks/<task-id>
 POST /tasks/<task-id>:cancel
 POST /tasks/<task-id>:subscribe
 ```
 
-The A2A routes project existing session, task, event, and artifact records. They do not expose LangGraph `thread_id`, raw graph state, raw prompts, raw model output, or full tool output.
+Prefer `/rpc` for new browser and service integrations. Path-style A2A routes remain compatibility routes during the current burn-in phase.
+
+Send a local message through `/rpc`:
+
+```bash
+curl -X POST http://127.0.0.1:8000/rpc \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "req-1",
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "kind": "message",
+        "role": "user",
+        "messageId": "msg-1",
+        "parts": [{"kind": "text", "text": "weather forecast for Beijing"}]
+      },
+      "metadata": {"executionMode": "message"}
+    }
+  }'
+```
+
+Run a task through `/rpc`:
+
+```bash
+curl -X POST http://127.0.0.1:8000/rpc \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "req-2",
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "kind": "message",
+        "role": "user",
+        "messageId": "msg-2",
+        "parts": [{"kind": "text", "text": "debug service health"}]
+      },
+      "metadata": {"executionMode": "task"}
+    }
+  }'
+```
+
+Inspect a task through `/rpc`:
+
+```bash
+curl -X POST http://127.0.0.1:8000/rpc \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":"req-3","method":"GetTask","params":{"id":"<task-id>"}}'
+```
+
+The `/api` prefix is no longer a public task lifecycle API. It is reserved for main-agent management and Web UI diagnostics:
+
+```text
+GET    /api/contexts
+GET    /api/contexts/{context_id}
+GET    /api/contexts/{context_id}/messages
+GET    /api/contexts/{context_id}/tasks
+GET    /api/contexts/{context_id}/route-decisions
+GET    /api/contexts/{context_id}/delegations
+DELETE /api/contexts/{context_id}?force=true
+GET    /api/registered-agents
+POST   /api/registered-agents
+GET    /api/registered-agents/{agent_id}
+POST   /api/registered-agents/{agent_id}/refresh-card
+DELETE /api/registered-agents/{agent_id}
+```
+
+The A2A routes project main-agent context, message, task, event, delegation, and artifact records. They do not expose LangGraph `thread_id`, raw graph state, raw prompts, raw model output, or full tool output.
 
 ## Model Configuration
 

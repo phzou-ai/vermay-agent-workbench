@@ -38,63 +38,107 @@ Use a different port:
 vermay-agent serve --host 127.0.0.1 --port 9000
 ```
 
-Available endpoints:
+Enable the A2A-first main-agent service surface:
+
+```bash
+vermay-agent serve --enable-a2a
+```
+
+Use deterministic development responders for UI and protocol smoke tests:
+
+```bash
+vermay-agent serve --enable-a2a --dev-mock-main-agent
+```
+
+Current public A2A service boundary:
 
 ```text
 GET  /health
-POST /api/sessions
-GET  /api/sessions
-GET  /api/sessions/{session_id}
-POST /api/sessions/{session_id}/tasks
-GET  /api/tasks/{task_id}
-GET  /api/tasks/{task_id}/events
-GET  /api/tasks/{task_id}/stream
-POST /api/tasks/{task_id}/resume
-POST /api/tasks/{task_id}/cancel
-POST /api/tasks/{task_id}/retry
+GET  /.well-known/agent-card.json
+POST /rpc
+POST /message:send
+POST /message:stream
+GET  /tasks/{task_id}
+POST /tasks/{task_id}:subscribe
+POST /tasks/{task_id}:cancel
 ```
 
-`POST /api/sessions` creates a long-lived session/context. `POST /api/sessions/{session_id}/tasks` starts one agent execution in that session and accepts optional structured MCP selection:
+Prefer `/rpc` for new integrations. Path-style A2A routes remain compatibility routes during burn-in.
 
-```json
-{
-  "input": "debug service health",
-  "wait": true,
-  "mcp": {
-    "servers": ["k8s"],
-    "prompts": [{"server": "k8s", "name": "k8s-service-health-check"}],
-    "resources": [{"server": "k8s", "uri": "k8s://cluster/services"}]
-  }
-}
-```
-
-`wait` defaults to `true`. When `wait` is `false`, the API returns quickly with a queued task; use `GET /api/tasks/{task_id}` and `GET /api/tasks/{task_id}/events` to inspect progress and final state.
-
-For live task lifecycle updates, use the SSE endpoint:
+Send a model-backed local message:
 
 ```bash
-curl -N http://127.0.0.1:8000/api/tasks/<task-id>/stream
-```
-
-Cancel a task:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/tasks/<task-id>/cancel \
+curl -X POST http://127.0.0.1:8000/rpc \
   -H 'Content-Type: application/json' \
-  -d '{"reason":"operator requested"}'
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "ops-message-1",
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "kind": "message",
+        "role": "user",
+        "messageId": "msg-ops-message-1",
+        "parts": [{"kind": "text", "text": "summarize current agent status"}]
+      },
+      "metadata": {"executionMode": "message"}
+    }
+  }'
 ```
 
-Retry a terminal task as a new task:
+Run a task:
 
 ```bash
-curl -X POST http://127.0.0.1:8000/api/tasks/<task-id>/retry \
+curl -X POST http://127.0.0.1:8000/rpc \
   -H 'Content-Type: application/json' \
-  -d '{"reason":"operator requested retry","wait":false}'
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "ops-task-1",
+    "method": "SendMessage",
+    "params": {
+      "message": {
+        "kind": "message",
+        "role": "user",
+        "messageId": "msg-ops-task-1",
+        "parts": [{"kind": "text", "text": "debug service health"}]
+      },
+      "metadata": {"executionMode": "task"}
+    }
+  }'
 ```
 
-Retry creates a new `task_id`, copies the source task input/model/MCP/max-loop settings, and records lineage through `root_task_id`, `retry_of_task_id`, and `attempt`. Completed retry tasks create their own final-answer artifact.
+Inspect a task:
 
-API MCP prompt and resource selections must name a server listed in `mcp.servers`. The selected MCP configuration is stored as task metadata and reused on approval resume.
+```bash
+curl -X POST http://127.0.0.1:8000/rpc \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":"ops-get-1","method":"GetTask","params":{"id":"<task-id>"}}'
+```
+
+Subscribe to task events:
+
+```bash
+curl -N -X POST http://127.0.0.1:8000/rpc \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":"ops-subscribe-1","method":"SubscribeToTask","params":{"id":"<task-id>","afterEventId":0}}'
+```
+
+The `/api` prefix is reserved for Web UI management and diagnostics:
+
+```text
+GET    /api/contexts
+GET    /api/contexts/{context_id}
+GET    /api/contexts/{context_id}/messages
+GET    /api/contexts/{context_id}/tasks
+GET    /api/contexts/{context_id}/route-decisions
+GET    /api/contexts/{context_id}/delegations
+DELETE /api/contexts/{context_id}?force=true
+GET    /api/registered-agents
+POST   /api/registered-agents
+GET    /api/registered-agents/{agent_id}
+POST   /api/registered-agents/{agent_id}/refresh-card
+DELETE /api/registered-agents/{agent_id}
+```
 
 The server is local-only by default and has no authentication. Keep the default bind address unless an access-control layer is added.
 
