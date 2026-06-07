@@ -283,6 +283,9 @@ def test_langgraph_runtime_interrupts_dangerous_tool_before_toolnode():
     assert result.final_answer is None
     assert result.interrupt["kind"] == "approval_required"
     assert result.interrupt["permission"]["reason"] == "tool 'dangerous' is marked dangerous"
+    assert result.interrupt["permission"]["approval_summary"] == "Approve tool call: dangerous"
+    assert result.interrupt["permission"]["safe_argument_preview"] == {}
+    assert result.interrupt["permission"]["policy_tags"] == ["unknown", "approval_required"]
     assert result.interrupt_message.startswith("Approval required for tool call")
     assert executed["value"] is False
 

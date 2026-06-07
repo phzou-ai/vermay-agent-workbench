@@ -103,6 +103,11 @@ def check_permission_node(components: GraphComponents):
                     "status": "approval_required",
                     "reason": decision.reason,
                     "tool_call": raw_tool_call,
+                    "decision": decision.decision,
+                    "risk_level": decision.risk_level,
+                    "approval_summary": decision.approval_summary,
+                    "safe_argument_preview": decision.safe_argument_preview,
+                    "policy_tags": decision.policy_tags,
                 }
                 _emit_permission(components, loop_index, permission)
                 return {"permission": permission}

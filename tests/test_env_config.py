@@ -13,33 +13,33 @@ def test_parse_env_file_filters_prefix_and_strips_quotes(tmp_path: Path):
         "\n".join(
             [
                 "# comment",
-                "MINI_AGENT_SSH_HOST='server.example'",
-                'MINI_AGENT_SSH_USER="agent"',
+                "VERMAY_AGENT_SSH_HOST='server.example'",
+                'VERMAY_AGENT_SSH_USER="agent"',
                 "OTHER_VALUE=ignored",
             ]
         ),
         encoding="utf-8",
     )
 
-    assert parse_env_file(path, prefix="MINI_AGENT_SSH_") == {
-        "MINI_AGENT_SSH_HOST": "server.example",
-        "MINI_AGENT_SSH_USER": "agent",
+    assert parse_env_file(path, prefix="VERMAY_AGENT_SSH_") == {
+        "VERMAY_AGENT_SSH_HOST": "server.example",
+        "VERMAY_AGENT_SSH_USER": "agent",
     }
 
 
 def test_load_prefixed_env_uses_local_file_over_default(tmp_path: Path, monkeypatch):
-    monkeypatch.delenv("MINI_AGENT_SSH_HOST", raising=False)
-    (tmp_path / ".env").write_text("MINI_AGENT_SSH_HOST=default-host\n", encoding="utf-8")
-    (tmp_path / ".env.local").write_text("MINI_AGENT_SSH_HOST=local-host\n", encoding="utf-8")
+    monkeypatch.delenv("VERMAY_AGENT_SSH_HOST", raising=False)
+    (tmp_path / ".env").write_text("VERMAY_AGENT_SSH_HOST=default-host\n", encoding="utf-8")
+    (tmp_path / ".env.local").write_text("VERMAY_AGENT_SSH_HOST=local-host\n", encoding="utf-8")
 
-    assert load_prefixed_env("MINI_AGENT_SSH_", root=tmp_path)["MINI_AGENT_SSH_HOST"] == "local-host"
+    assert load_prefixed_env("VERMAY_AGENT_SSH_", root=tmp_path)["VERMAY_AGENT_SSH_HOST"] == "local-host"
 
 
 def test_load_prefixed_env_uses_shell_env_over_files(tmp_path: Path, monkeypatch):
-    (tmp_path / ".env.local").write_text("MINI_AGENT_SSH_HOST=local-host\n", encoding="utf-8")
-    monkeypatch.setenv("MINI_AGENT_SSH_HOST", "shell-host")
+    (tmp_path / ".env.local").write_text("VERMAY_AGENT_SSH_HOST=local-host\n", encoding="utf-8")
+    monkeypatch.setenv("VERMAY_AGENT_SSH_HOST", "shell-host")
 
-    assert load_prefixed_env("MINI_AGENT_SSH_", root=tmp_path)["MINI_AGENT_SSH_HOST"] == "shell-host"
+    assert load_prefixed_env("VERMAY_AGENT_SSH_", root=tmp_path)["VERMAY_AGENT_SSH_HOST"] == "shell-host"
 
 
 def test_load_prefixed_env_with_legacy_aliases_normalizes_legacy_keys(tmp_path: Path, monkeypatch):

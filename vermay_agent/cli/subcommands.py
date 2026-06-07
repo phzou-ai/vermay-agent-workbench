@@ -43,6 +43,11 @@ def run_serve_command(argv: list[str]) -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--enable-a2a", action="store_true", help="Expose local A2A protocol routes.")
+    parser.add_argument(
+        "--dev-mock-main-agent",
+        action="store_true",
+        help="Use deterministic development responders for main-agent message and task flows.",
+    )
     args = parser.parse_args(argv)
 
     import uvicorn
@@ -50,8 +55,11 @@ def run_serve_command(argv: list[str]) -> None:
     if args.enable_a2a:
         from ..api.app import create_app
 
+        create_app_kwargs = {"enable_a2a": True}
+        if args.dev_mock_main_agent:
+            create_app_kwargs["dev_mock_main_agent"] = True
         uvicorn.run(
-            create_app(enable_a2a=True),
+            create_app(**create_app_kwargs),
             host=args.host,
             port=args.port,
         )

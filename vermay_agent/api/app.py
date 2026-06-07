@@ -1,165 +1,100 @@
 from __future__ import annotations
 
-import asyncio
-import json
+import os
 from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from vermay_agent.app_factory import DEFAULT_AGENT_STORE_PATH, DEFAULT_MODEL_CONFIG_PATH, RuntimeFactoryConfig
-from vermay_agent.errors import ArtifactNotFoundError, SessionNotFoundError, TaskNotFoundError, error_info_from_exception
-from vermay_agent.langgraph_runtime import ModelProviderConfig
-from vermay_agent.mcp.selection import MCPSelectionConfig
+from vermay_agent.app_factory import DEFAULT_AGENT_STORE_PATH, DEFAULT_MODEL_CONFIG_PATH, RuntimeFactoryConfig, build_runtime
+from vermay_agent.errors import error_info_from_exception
+from vermay_agent.langgraph_runtime import build_model_client
+from vermay_agent.main_agent import (
+    DevMockLocalMessageResponder,
+    DevMockLocalTaskRunner,
+    DirectA2ARemoteAgentClient,
+    DirectLangGraphLocalTaskRunner,
+    DirectModelLocalMessageResponder,
+    MainAgentCore,
+    MainAgentStore,
+    build_dev_mock_runtime,
+    fetch_agent_card,
+)
 from vermay_agent.model_selection import resolve_model_selection
 from vermay_agent.storage import AgentStore
 from vermay_agent.trace import TraceLogger
 
 from .a2a import A2AAdapter, A2AAdapterConfig, A2AAgentCardConfig, create_a2a_router
 from .lifecycle import TraceLifecycleObserver
-from .output_envelope import is_projectable_to_local_api, normalize_output_metadata
-from .service import AgentService, AgentStartOptions
-from .session_models import is_terminal
-from .session_store import SessionStore, TaskArtifactRecord
+from .service import AgentService
+from .session_store import SessionStore
 
 
-class AgentErrorResponse(BaseModel):
-    code: str
-    message: str
-
-
-class SessionCreateRequest(BaseModel):
-    session_id: str | None = None
-    context_id: str | None = None
-    title: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class SessionResponse(BaseModel):
-    session_id: str
-    context_id: str | None = None
-    title: str | None = None
-    status: str
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    created_at: str
-    updated_at: str
-
-
-class TaskResponse(BaseModel):
-    task_id: str
-    session_id: str
-    thread_id: str
-    root_task_id: str | None = None
-    retry_of_task_id: str | None = None
-    status: str
-    input: str
-    attempt: int
-    final_answer: str | None = None
-    interrupt: Any | None = None
-    interrupt_message: str | None = None
-    stop_message: str | None = None
-    error: AgentErrorResponse | None = None
-    model: dict[str, Any] | None = None
-    max_loops: int | None = None
-    mcp: dict[str, Any] | None = None
-    created_at: str
-    updated_at: str
-
-
-class TaskEventResponse(BaseModel):
-    event_id: int
-    task_id: str
-    session_id: str
-    context_id: str | None = None
-    thread_id: str | None = None
-    event_type: str
-    status: str | None = None
-    payload: dict[str, Any] = Field(default_factory=dict)
-    created_at: str
-
-
-class TaskArtifactResponse(BaseModel):
-    artifact_id: str
-    task_id: str
-    session_id: str
-    context_id: str | None = None
-    a2a_artifact_id: str
-    name: str | None = None
-    description: str | None = None
-    parts: list[dict[str, Any]] = Field(default_factory=list)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    extensions: list[str] = Field(default_factory=list)
-    created_at: str
-    updated_at: str
-
-
-class ModelConfigRequest(BaseModel):
-    provider: str = "ollama"
-    options: dict[str, Any] = Field(default_factory=dict)
-
-
-class MCPPromptSelectionRequest(BaseModel):
-    server: str = Field(min_length=1)
+class RegisteredAgentUpsertRequest(BaseModel):
+    agent_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
-    arguments: dict[str, str] = Field(default_factory=dict)
+    card_url: str = Field(min_length=1)
+    card_json: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class MCPResourceSelectionRequest(BaseModel):
-    server: str = Field(min_length=1)
-    uri: str = Field(min_length=1)
+class RegisteredAgentResponse(BaseModel):
+    agent_id: str
+    name: str
+    card_url: str
+    card_json: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    created_at: str
+    updated_at: str
 
 
-class MCPSessionRequest(BaseModel):
-    servers: list[str] = Field(default_factory=list)
-    prompts: list[MCPPromptSelectionRequest] = Field(default_factory=list)
-    resources: list[MCPResourceSelectionRequest] = Field(default_factory=list)
-
-
-class TaskStartRequest(BaseModel):
-    input: str = Field(min_length=1)
-    task_id: str | None = None
-    max_loops: int | None = Field(default=None, gt=0)
-    model: str | ModelConfigRequest | None = None
-    mcp: MCPSessionRequest | None = None
-    wait: bool = True
-
-
-class ApprovalResumeRequest(BaseModel):
-    approved: bool
-    reason: str | None = None
-    wait: bool = True
-
-
-class TaskCancelRequest(BaseModel):
-    reason: str | None = None
-
-
-class TaskRetryRequest(BaseModel):
-    task_id: str | None = None
-    reason: str | None = None
-    wait: bool = True
-
-
-def create_app(service: AgentService | None = None, *, enable_a2a: bool = False) -> FastAPI:
+def create_app(
+    service: AgentService | None = None,
+    *,
+    enable_a2a: bool = False,
+    main_agent_core: MainAgentCore | None = None,
+    dev_mock_main_agent: bool | None = None,
+) -> FastAPI:
     owned_store = None
     owned_service = service
+    owned_task_runner = None
     owns_service = owned_service is None
+    use_dev_mock_main_agent = _dev_mock_main_agent_enabled(dev_mock_main_agent)
     if owned_service is None:
         owned_store = AgentStore(DEFAULT_AGENT_STORE_PATH)
         default_config = RuntimeFactoryConfig(show_progress=False)
         owned_service = AgentService(
             session_store=SessionStore(owned_store),
             default_config=default_config,
+            runtime_builder=build_dev_mock_runtime if use_dev_mock_main_agent else build_runtime,
             lifecycle_observer=TraceLifecycleObserver(TraceLogger(default_config.trace_path)),
         )
+        if main_agent_core is None:
+            if use_dev_mock_main_agent:
+                local_message_responder = DevMockLocalMessageResponder()
+                owned_task_runner = DevMockLocalTaskRunner()
+            else:
+                active_model = resolve_model_selection(config_path=DEFAULT_MODEL_CONFIG_PATH)
+                local_message_responder = DirectModelLocalMessageResponder(build_model_client(active_model))
+                owned_task_runner = DirectLangGraphLocalTaskRunner(build_runtime(default_config))
+            main_agent_core = MainAgentCore(
+                store=MainAgentStore(owned_store),
+                local_message_responder=local_message_responder,
+                local_task_runner=owned_task_runner,
+                remote_agent_client=DirectA2ARemoteAgentClient(),
+            )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         try:
             yield
         finally:
+            if owned_task_runner is not None:
+                owned_task_runner.close()
             if owns_service:
                 owned_service.close()
             if owned_store is not None:
@@ -167,12 +102,21 @@ def create_app(service: AgentService | None = None, *, enable_a2a: bool = False)
 
     app = FastAPI(title="Vermay Agent Workbench API", version="0.1.0", lifespan=lifespan)
     app.state.agent_service = owned_service
+    app.state.main_agent_core = main_agent_core
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        if request.url.path.startswith("/api/") and _is_error_payload(exc.detail):
+            return JSONResponse(status_code=exc.status_code, content=exc.detail, headers=exc.headers)
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
+
     if enable_a2a:
         app.include_router(
             create_a2a_router(
                 A2AAdapter(
                     service=owned_service,
                     config=A2AAdapterConfig(agent_card=A2AAgentCardConfig(streaming=True)),
+                    main_agent_core=main_agent_core,
                 )
             )
         )
@@ -183,220 +127,224 @@ def create_app(service: AgentService | None = None, *, enable_a2a: bool = False)
 
     api_router = APIRouter(prefix="/api")
 
-    @api_router.post("/sessions", response_model=SessionResponse)
-    def create_session(request: SessionCreateRequest) -> dict[str, Any]:
+    @api_router.get("/contexts")
+    def list_contexts() -> list[dict[str, Any]]:
+        core = _main_agent_core(app)
+        return [_context_to_dict(record) for record in core.store.list_contexts()]
+
+    @api_router.get("/contexts/{context_id}")
+    def get_context(context_id: str) -> dict[str, Any]:
+        core = _main_agent_core(app)
+        record = core.store.get_context(context_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail={"code": "context_not_found", "message": "context not found"})
+        return _context_to_dict(record)
+
+    @api_router.get("/contexts/{context_id}/messages")
+    def list_context_messages(context_id: str, limit: int | None = Query(default=None, ge=1)) -> list[dict[str, Any]]:
+        core = _main_agent_core(app)
+        if core.store.get_context(context_id) is None:
+            raise HTTPException(status_code=404, detail={"code": "context_not_found", "message": "context not found"})
+        return [_message_to_dict(record) for record in core.store.list_context_messages(context_id, limit=limit)]
+
+    @api_router.get("/contexts/{context_id}/route-decisions")
+    def list_context_route_decisions(context_id: str) -> list[dict[str, Any]]:
+        core = _main_agent_core(app)
+        if core.store.get_context(context_id) is None:
+            raise HTTPException(status_code=404, detail={"code": "context_not_found", "message": "context not found"})
+        return [_route_decision_to_dict(record) for record in core.store.list_context_route_decisions(context_id)]
+
+    @api_router.get("/contexts/{context_id}/delegations")
+    def list_context_delegations(context_id: str) -> list[dict[str, Any]]:
+        core = _main_agent_core(app)
+        if core.store.get_context(context_id) is None:
+            raise HTTPException(status_code=404, detail={"code": "context_not_found", "message": "context not found"})
+        return [_delegation_to_dict(record) for record in core.store.list_context_delegations(context_id)]
+
+    @api_router.delete("/contexts/{context_id}", status_code=204)
+    def delete_context(context_id: str, force: bool = Query(default=False)) -> None:
+        core = _main_agent_core(app)
+        if core.store.get_context(context_id) is None:
+            raise HTTPException(status_code=404, detail={"code": "context_not_found", "message": "context not found"})
         try:
-            record = app.state.agent_service.create_session(
-                session_id=request.session_id,
-                context_id=request.context_id,
-                title=request.title,
+            core.store.delete_context(context_id, force=force)
+        except Exception as exc:
+            raise _http_exception(exc) from exc
+
+    @api_router.get("/registered-agents", response_model=list[RegisteredAgentResponse])
+    def list_registered_agents(enabled_only: bool = Query(default=False)) -> list[dict[str, Any]]:
+        core = _main_agent_core(app)
+        return [
+            _registered_agent_to_dict(record)
+            for record in core.store.list_registered_agents(enabled_only=enabled_only)
+        ]
+
+    @api_router.post("/registered-agents", response_model=RegisteredAgentResponse)
+    def upsert_registered_agent(request: RegisteredAgentUpsertRequest) -> dict[str, Any]:
+        core = _main_agent_core(app)
+        try:
+            record = core.store.upsert_registered_agent(
+                agent_id=request.agent_id,
+                name=request.name,
+                card_url=request.card_url,
+                card_json=request.card_json,
+                enabled=request.enabled,
                 metadata=request.metadata,
             )
-            return record.to_dict()
+            return _registered_agent_to_dict(record)
         except Exception as exc:
             raise _http_exception(exc) from exc
 
-    @api_router.get("/sessions", response_model=list[SessionResponse])
-    def list_sessions() -> list[dict[str, Any]]:
-        return [record.to_dict() for record in app.state.agent_service.list_sessions()]
-
-    @api_router.get("/sessions/{session_id}", response_model=SessionResponse)
-    def get_session(session_id: str) -> dict[str, Any]:
-        record = app.state.agent_service.get_session(session_id)
+    @api_router.get("/registered-agents/{agent_id}", response_model=RegisteredAgentResponse)
+    def get_registered_agent(agent_id: str) -> dict[str, Any]:
+        core = _main_agent_core(app)
+        record = core.store.get_registered_agent(agent_id)
         if record is None:
-            raise _http_exception(SessionNotFoundError(session_id))
-        return record.to_dict()
-
-    @api_router.delete("/sessions/{session_id}", status_code=204)
-    def delete_session(session_id: str) -> None:
-        try:
-            app.state.agent_service.delete_session(session_id)
-        except Exception as exc:
-            error = error_info_from_exception(exc)
-            if error.code.value == "invalid_session_state":
-                return JSONResponse(
-                    status_code=error.http_status,
-                    content={"code": error.code.value, "message": error.public_message},
-                )
-            raise _http_exception(exc) from exc
-
-    @api_router.post("/sessions/{session_id}/tasks", response_model=TaskResponse)
-    def start_task(session_id: str, request: TaskStartRequest) -> dict[str, Any]:
-        try:
-            record = app.state.agent_service.start_task(
-                session_id,
-                request.input,
-                task_id=request.task_id,
-                options=AgentStartOptions(
-                    model=_model_config(request.model),
-                    max_loops=request.max_loops,
-                    mcp=_mcp_config(request.mcp),
-                ),
-                wait=request.wait,
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "registered_agent_not_found", "message": "registered agent not found"},
             )
-            return record.to_dict()
-        except Exception as exc:
-            raise _http_exception(exc) from exc
+        return _registered_agent_to_dict(record)
 
-    @api_router.get("/tasks/{task_id}", response_model=TaskResponse)
-    def get_task(task_id: str) -> dict[str, Any]:
-        record = app.state.agent_service.get_task(task_id)
+    @api_router.post("/registered-agents/{agent_id}/refresh-card", response_model=RegisteredAgentResponse)
+    def refresh_registered_agent_card(agent_id: str) -> dict[str, Any]:
+        core = _main_agent_core(app)
+        record = core.store.get_registered_agent(agent_id)
         if record is None:
-            raise _http_exception(TaskNotFoundError(task_id))
-        return record.to_dict()
-
-    @api_router.get("/tasks/{task_id}/events", response_model=list[TaskEventResponse])
-    def get_task_events(task_id: str) -> list[dict[str, Any]]:
-        try:
-            return [record.to_dict() for record in app.state.agent_service.list_task_events(task_id)]
-        except Exception as exc:
-            raise _http_exception(exc) from exc
-
-    @api_router.get("/tasks/{task_id}/artifacts", response_model=list[TaskArtifactResponse])
-    def list_task_artifacts(task_id: str) -> list[dict[str, Any]]:
-        try:
-            artifacts = app.state.agent_service.list_task_artifacts(task_id)
-            return [_local_api_artifact_payload(artifact) for artifact in _projectable_local_api_artifacts(artifacts)]
-        except Exception as exc:
-            raise _http_exception(exc) from exc
-
-    @api_router.get("/tasks/{task_id}/artifacts/{artifact_id}", response_model=TaskArtifactResponse)
-    def get_task_artifact(task_id: str, artifact_id: str) -> dict[str, Any]:
-        try:
-            artifacts = app.state.agent_service.list_task_artifacts(task_id)
-        except Exception as exc:
-            raise _http_exception(exc) from exc
-        for artifact in _projectable_local_api_artifacts(artifacts):
-            if artifact.artifact_id == artifact_id:
-                return _local_api_artifact_payload(artifact)
-        raise _http_exception(ArtifactNotFoundError(artifact_id))
-
-    @api_router.get("/tasks/{task_id}/stream")
-    async def stream_task_events(
-        task_id: str,
-        request: Request,
-        after: int = Query(default=0, ge=0),
-    ) -> StreamingResponse:
-        if app.state.agent_service.get_task(task_id) is None:
-            raise _http_exception(TaskNotFoundError(task_id))
-
-        async def event_stream():
-            last_event_id = after
-            while True:
-                if await request.is_disconnected():
-                    break
-                try:
-                    events = await asyncio.to_thread(
-                        app.state.agent_service.wait_for_task_events,
-                        task_id,
-                        after_event_id=last_event_id,
-                        timeout_seconds=1.0,
-                    )
-                except Exception:
-                    break
-                for event in events:
-                    last_event_id = max(last_event_id, event.event_id)
-                    yield _format_sse_event(event.to_dict())
-
-                task = app.state.agent_service.get_task(task_id)
-                if task is None or is_terminal(task.status):
-                    trailing_events = await asyncio.to_thread(
-                        app.state.agent_service.wait_for_task_events,
-                        task_id,
-                        after_event_id=last_event_id,
-                        timeout_seconds=0.0,
-                    )
-                    for event in trailing_events:
-                        last_event_id = max(last_event_id, event.event_id)
-                        yield _format_sse_event(event.to_dict())
-                    break
-
-        return StreamingResponse(
-            event_stream(),
-            media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "X-Accel-Buffering": "no",
-            },
-        )
-
-    @api_router.post("/tasks/{task_id}/resume", response_model=TaskResponse)
-    def resume_task(task_id: str, request: ApprovalResumeRequest) -> dict[str, Any]:
-        try:
-            record = app.state.agent_service.resume_task(
-                task_id,
-                approved=request.approved,
-                reason=request.reason,
-                wait=request.wait,
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "registered_agent_not_found", "message": "registered agent not found"},
             )
-            return record.to_dict()
-        except Exception as exc:
-            raise _http_exception(exc) from exc
-
-    @api_router.post("/tasks/{task_id}/cancel", response_model=TaskResponse)
-    def cancel_task(task_id: str, request: TaskCancelRequest | None = None) -> dict[str, Any]:
         try:
-            record = app.state.agent_service.cancel_task(
-                task_id,
-                reason=request.reason if request is not None else None,
-            )
-            return record.to_dict()
+            card_json = fetch_agent_card(record.card_url)
+            refreshed = core.store.update_registered_agent_card(agent_id, card_json=card_json)
         except Exception as exc:
-            raise _http_exception(exc) from exc
+            raise HTTPException(
+                status_code=502,
+                detail={"code": "agent_card_refresh_failed", "message": str(exc)},
+            ) from exc
+        if refreshed is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "registered_agent_not_found", "message": "registered agent not found"},
+            )
+        return _registered_agent_to_dict(refreshed)
 
-    @api_router.post("/tasks/{task_id}/retry", response_model=TaskResponse)
-    def retry_task(task_id: str, request: TaskRetryRequest | None = None) -> dict[str, Any]:
-        try:
-            record = app.state.agent_service.retry_task(
-                task_id,
-                new_task_id=request.task_id if request is not None else None,
-                reason=request.reason if request is not None else None,
-                wait=request.wait if request is not None else True,
+    @api_router.delete("/registered-agents/{agent_id}", status_code=204)
+    def delete_registered_agent(agent_id: str) -> None:
+        core = _main_agent_core(app)
+        if not core.store.delete_registered_agent(agent_id):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "registered_agent_not_found", "message": "registered agent not found"},
             )
-            return record.to_dict()
-        except Exception as exc:
-            raise _http_exception(exc) from exc
 
     app.include_router(api_router)
 
     return app
 
 
-def _model_config(request: str | ModelConfigRequest | None) -> ModelProviderConfig | None:
-    if isinstance(request, str):
-        return resolve_model_selection(
-            config_path=DEFAULT_MODEL_CONFIG_PATH,
-            model_name=request,
-        )
-    if request is None:
-        return None
-    return ModelProviderConfig(provider=request.provider, options=request.options)
+def _dev_mock_main_agent_enabled(value: bool | None) -> bool:
+    if value is not None:
+        return value
+    return _truthy_env(os.environ.get("VERMAY_AGENT_DEV_MOCK_MAIN_AGENT"))
 
 
-def _mcp_config(request: MCPSessionRequest | None) -> MCPSelectionConfig | None:
-    if request is None:
-        return None
-    payload = request.model_dump() if hasattr(request, "model_dump") else request.dict()
-    return MCPSelectionConfig.from_payload(payload)
+def _truthy_env(value: str | None) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _http_exception(exc: Exception) -> HTTPException:
     error = error_info_from_exception(exc)
-    return HTTPException(status_code=error.http_status, detail=error.public_message)
+    return HTTPException(
+        status_code=error.http_status,
+        detail={
+            "code": error.code.value,
+            "message": error.public_message,
+        },
+    )
 
 
-def _format_sse_event(event: dict[str, Any]) -> str:
-    event_id = event["event_id"]
-    event_type = event["event_type"]
-    data = json.dumps(event, ensure_ascii=False, sort_keys=True)
-    return f"id: {event_id}\nevent: {event_type}\ndata: {data}\n\n"
+def _main_agent_core(app: FastAPI) -> MainAgentCore:
+    core = getattr(app.state, "main_agent_core", None)
+    if core is None:
+        raise HTTPException(status_code=404, detail={"code": "not_found", "message": "main agent core not enabled"})
+    return core
 
 
-def _projectable_local_api_artifacts(artifacts: list[TaskArtifactRecord]) -> list[TaskArtifactRecord]:
-    return [artifact for artifact in artifacts if is_projectable_to_local_api(artifact.metadata)]
+def _context_to_dict(record) -> dict[str, Any]:
+    return {
+        "context_id": record.context_id,
+        "title": record.title,
+        "metadata": record.metadata,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+    }
 
 
-def _local_api_artifact_payload(artifact: TaskArtifactRecord) -> dict[str, Any]:
-    payload = artifact.to_dict()
-    payload["metadata"] = normalize_output_metadata(artifact.metadata)
-    return payload
+def _message_to_dict(record) -> dict[str, Any]:
+    return {
+        "message_id": record.message_id,
+        "context_id": record.context_id,
+        "role": record.role.value,
+        "parts": record.parts,
+        "task_id": record.task_id,
+        "metadata": record.metadata,
+        "created_at": record.created_at,
+    }
+
+
+def _route_decision_to_dict(record) -> dict[str, Any]:
+    return {
+        "decision_id": record.decision_id,
+        "context_id": record.context_id,
+        "message_id": record.message_id,
+        "kind": record.kind.value,
+        "reason": record.reason,
+        "confidence": record.confidence,
+        "target_agent_id": record.target_agent_id,
+        "metadata": record.metadata,
+        "created_at": record.created_at,
+    }
+
+
+def _delegation_to_dict(record) -> dict[str, Any]:
+    return {
+        "delegation_id": record.delegation_id,
+        "context_id": record.context_id,
+        "input_message_id": record.input_message_id,
+        "route_decision_id": record.route_decision_id,
+        "remote_agent_id": record.remote_agent_id,
+        "local_task_id": record.local_task_id,
+        "remote_task_id": record.remote_task_id,
+        "remote_context_id": record.remote_context_id,
+        "remote_message_id": record.remote_message_id,
+        "result_kind": record.result_kind,
+        "status": record.status,
+        "metadata": record.metadata,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+    }
+
+
+def _registered_agent_to_dict(record) -> dict[str, Any]:
+    return {
+        "agent_id": record.agent_id,
+        "name": record.name,
+        "card_url": record.card_url,
+        "card_json": record.card_json,
+        "enabled": record.enabled,
+        "metadata": record.metadata,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+    }
+
+
+def _is_error_payload(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get("code"), str)
+        and isinstance(value.get("message"), str)
+    )

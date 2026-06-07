@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,6 +21,15 @@ class A2ASendMessageRequest(BaseModel):
 
     message: A2AMessage
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class A2AJsonRpcMessageSendRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    jsonrpc: Literal["2.0"]
+    method: Literal["message/send"]
+    params: dict[str, Any]
+    id: Any = None
 
 
 class A2ACancelTaskRequest(BaseModel):

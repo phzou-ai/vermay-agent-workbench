@@ -93,8 +93,8 @@ def project_task(
         projected_artifacts = [_artifact_payload(artifact) for artifact in artifacts if _is_projectable_artifact(artifact)]
         if projected_artifacts:
             task_payload["artifacts"] = projected_artifacts
-    payload = {"task": task_payload}
-    return A2AProjection(kind=A2AProjectionKind.TASK, payload=payload)
+    task_payload["kind"] = "task"
+    return A2AProjection(kind=A2AProjectionKind.TASK, payload=task_payload)
 
 
 def project_task_event(event: TaskEventRecord) -> A2AProjection:
@@ -106,21 +106,20 @@ def project_task_event(event: TaskEventRecord) -> A2AProjection:
     context_id = _context_id(context_id=event.context_id, session_id=event.session_id)
     state = map_task_status(event.status)
     payload = {
-        "statusUpdate": {
-            "taskId": event.task_id,
-            "contextId": context_id,
-            "status": {
-                "state": state.value,
-                "timestamp": event.created_at,
-            },
-            "metadata": _metadata(
-                session_id=event.session_id,
-                task_id=event.task_id,
-                event_id=event.event_id,
-                event_type=event.event_type,
-                local_status=event.status,
-            ),
-        }
+        "kind": "status-update",
+        "taskId": event.task_id,
+        "contextId": context_id,
+        "status": {
+            "state": state.value,
+            "timestamp": event.created_at,
+        },
+        "metadata": _metadata(
+            session_id=event.session_id,
+            task_id=event.task_id,
+            event_id=event.event_id,
+            event_type=event.event_type,
+            local_status=event.status,
+        ),
     }
     return A2AProjection(kind=A2AProjectionKind.STATUS_UPDATE, payload=payload)
 
@@ -128,7 +127,9 @@ def project_task_event(event: TaskEventRecord) -> A2AProjection:
 def project_task_artifact(artifact: TaskArtifactRecord) -> A2AProjection:
     if not _is_projectable_artifact(artifact):
         return A2AProjection(kind=A2AProjectionKind.INTERNAL, payload=None)
-    return A2AProjection(kind=A2AProjectionKind.ARTIFACT, payload={"artifact": _artifact_payload(artifact)})
+    payload = _artifact_payload(artifact)
+    payload["kind"] = "artifact"
+    return A2AProjection(kind=A2AProjectionKind.ARTIFACT, payload=payload)
 
 
 def project_task_artifact_event(event: TaskEventRecord, *, artifact: TaskArtifactRecord | None) -> A2AProjection:
@@ -143,20 +144,19 @@ def project_task_artifact_event(event: TaskEventRecord, *, artifact: TaskArtifac
 
     context_id = _context_id(context_id=event.context_id or artifact.context_id, session_id=event.session_id)
     payload = {
-        "artifactUpdate": {
-            "taskId": event.task_id,
-            "contextId": context_id,
-            "artifact": _artifact_payload(artifact),
-            "append": False,
-            "lastChunk": True,
-            "metadata": _metadata(
-                session_id=event.session_id,
-                task_id=event.task_id,
-                event_id=event.event_id,
-                event_type=event.event_type,
-                local_status=event.status or "unknown",
-            ),
-        }
+        "kind": "artifact-update",
+        "taskId": event.task_id,
+        "contextId": context_id,
+        "artifact": _artifact_payload(artifact),
+        "append": False,
+        "lastChunk": True,
+        "metadata": _metadata(
+            session_id=event.session_id,
+            task_id=event.task_id,
+            event_id=event.event_id,
+            event_type=event.event_type,
+            local_status=event.status or "unknown",
+        ),
     }
     return A2AProjection(kind=A2AProjectionKind.ARTIFACT_UPDATE, payload=payload)
 

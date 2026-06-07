@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -9,7 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 8
+DEV_SCHEMA_RESET_ENV = "VERMAY_AGENT_ALLOW_DEV_SCHEMA_RESET"
 
 
 def utc_now() -> str:
@@ -200,6 +202,160 @@ def _apply_schema_v6(conn: sqlite3.Connection) -> None:
     )
 
 
+def _apply_schema_v7(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS contexts (
+            context_id TEXT PRIMARY KEY,
+            title TEXT,
+            metadata TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_contexts_updated_at ON contexts(updated_at);
+
+        CREATE TABLE IF NOT EXISTS messages (
+            message_id TEXT PRIMARY KEY,
+            context_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            parts TEXT NOT NULL DEFAULT '[]',
+            task_id TEXT,
+            metadata TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(context_id) REFERENCES contexts(context_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_messages_context_created ON messages(context_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_messages_task_id ON messages(task_id);
+
+        CREATE TABLE IF NOT EXISTS route_decisions (
+            decision_id TEXT PRIMARY KEY,
+            context_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            target_agent_id TEXT,
+            reason TEXT NOT NULL,
+            confidence REAL,
+            metadata TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(context_id) REFERENCES contexts(context_id),
+            FOREIGN KEY(message_id) REFERENCES messages(message_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_route_decisions_context_created
+            ON route_decisions(context_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_route_decisions_message_id ON route_decisions(message_id);
+
+        CREATE TABLE IF NOT EXISTS main_agent_tasks (
+            task_id TEXT PRIMARY KEY,
+            context_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            input_message_id TEXT NOT NULL,
+            output_message_id TEXT,
+            runtime_thread_id TEXT NOT NULL UNIQUE,
+            assigned_agent_id TEXT,
+            retry_of_task_id TEXT,
+            attempt INTEGER NOT NULL DEFAULT 1,
+            model TEXT,
+            max_loops INTEGER,
+            mcp TEXT,
+            error_code TEXT,
+            error_message TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(context_id) REFERENCES contexts(context_id),
+            FOREIGN KEY(input_message_id) REFERENCES messages(message_id),
+            FOREIGN KEY(output_message_id) REFERENCES messages(message_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_main_agent_tasks_context_updated
+            ON main_agent_tasks(context_id, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_main_agent_tasks_input_message_id
+            ON main_agent_tasks(input_message_id);
+        CREATE INDEX IF NOT EXISTS idx_main_agent_tasks_retry_of_task_id
+            ON main_agent_tasks(retry_of_task_id);
+
+        CREATE TABLE IF NOT EXISTS main_agent_task_events (
+            event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL,
+            type TEXT NOT NULL,
+            status TEXT,
+            payload TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(task_id) REFERENCES main_agent_tasks(task_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_main_agent_task_events_task_event
+            ON main_agent_task_events(task_id, event_id);
+
+        CREATE TABLE IF NOT EXISTS artifacts (
+            artifact_id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL,
+            context_id TEXT NOT NULL,
+            parts TEXT NOT NULL DEFAULT '[]',
+            metadata TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(task_id) REFERENCES main_agent_tasks(task_id),
+            FOREIGN KEY(context_id) REFERENCES contexts(context_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_artifacts_task_id ON artifacts(task_id);
+        CREATE INDEX IF NOT EXISTS idx_artifacts_context_id ON artifacts(context_id);
+        """
+    )
+
+
+def _apply_schema_v8(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS registered_agents (
+            agent_id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            card_url TEXT NOT NULL,
+            card_json TEXT NOT NULL DEFAULT '{}',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            metadata TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_registered_agents_enabled
+            ON registered_agents(enabled, updated_at);
+
+        CREATE TABLE IF NOT EXISTS delegated_tasks (
+            delegation_id TEXT PRIMARY KEY,
+            context_id TEXT NOT NULL,
+            input_message_id TEXT NOT NULL,
+            route_decision_id TEXT NOT NULL,
+            remote_agent_id TEXT NOT NULL,
+            local_task_id TEXT,
+            remote_task_id TEXT,
+            remote_context_id TEXT,
+            remote_message_id TEXT,
+            result_kind TEXT NOT NULL,
+            status TEXT NOT NULL,
+            metadata TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(context_id) REFERENCES contexts(context_id),
+            FOREIGN KEY(input_message_id) REFERENCES messages(message_id),
+            FOREIGN KEY(route_decision_id) REFERENCES route_decisions(decision_id),
+            FOREIGN KEY(remote_agent_id) REFERENCES registered_agents(agent_id),
+            FOREIGN KEY(local_task_id) REFERENCES main_agent_tasks(task_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_delegated_tasks_context_updated
+            ON delegated_tasks(context_id, updated_at);
+        CREATE INDEX IF NOT EXISTS idx_delegated_tasks_local_task_id
+            ON delegated_tasks(local_task_id);
+        CREATE INDEX IF NOT EXISTS idx_delegated_tasks_remote_agent_id
+            ON delegated_tasks(remote_agent_id);
+        """
+    )
+
+
 MIGRATIONS: tuple[SchemaMigration, ...] = (
     SchemaMigration(1, "initial_metadata_tables", _apply_schema_v1),
     SchemaMigration(2, "session_mcp_and_error_metadata", _apply_schema_v2),
@@ -207,6 +363,8 @@ MIGRATIONS: tuple[SchemaMigration, ...] = (
     SchemaMigration(4, "session_task_event_identity_cleanup", _apply_schema_v4),
     SchemaMigration(5, "task_retry_lineage", _apply_schema_v5),
     SchemaMigration(6, "task_artifacts", _apply_schema_v6),
+    SchemaMigration(7, "a2a_main_agent_core_tables", _apply_schema_v7),
+    SchemaMigration(8, "a2a_remote_agent_registry", _apply_schema_v8),
 )
 
 
@@ -224,7 +382,19 @@ class AgentStore:
     def setup(self) -> None:
         with self._lock:
             _ensure_schema_migrations_table(self.conn)
+            self._reset_development_schema_if_required()
             self._apply_pending_migrations()
+
+    def _reset_development_schema_if_required(self) -> None:
+        if not _requires_development_schema_reset(self.conn):
+            return
+        if os.environ.get(DEV_SCHEMA_RESET_ENV) != "1":
+            raise RuntimeError(
+                "legacy agent store schema requires development reset; "
+                f"set {DEV_SCHEMA_RESET_ENV}=1 to reset this SQLite database"
+            )
+        _reset_sqlite_schema(self.conn)
+        _ensure_schema_migrations_table(self.conn)
 
     def _ensure_column(self, table: str, column: str, declaration: str) -> None:
         _ensure_column(self.conn, table, column, declaration)
@@ -354,6 +524,40 @@ def _ensure_schema_migrations_table(conn: sqlite3.Connection) -> None:
         """
     )
     conn.commit()
+
+
+def _requires_development_schema_reset(conn: sqlite3.Connection) -> bool:
+    versions = {int(row["version"]) for row in conn.execute("SELECT version FROM schema_migrations")}
+    if not versions:
+        return False
+    if max(versions) >= 4:
+        return False
+    return _table_exists(conn, "sessions") and _is_legacy_sessions_table(conn, "sessions")
+
+
+def _reset_sqlite_schema(conn: sqlite3.Connection) -> None:
+    with conn:
+        rows = conn.execute(
+            """
+            SELECT type, name
+            FROM sqlite_master
+            WHERE type IN ('table', 'view', 'trigger', 'index')
+              AND name NOT LIKE 'sqlite_%'
+            ORDER BY CASE type
+                WHEN 'view' THEN 0
+                WHEN 'trigger' THEN 1
+                WHEN 'index' THEN 2
+                WHEN 'table' THEN 3
+                ELSE 4
+              END
+            """
+        ).fetchall()
+        for row in rows:
+            conn.execute(f"DROP {row['type'].upper()} IF EXISTS {_quote_identifier(str(row['name']))}")
+
+
+def _quote_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, declaration: str) -> None:

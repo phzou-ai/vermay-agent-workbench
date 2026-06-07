@@ -234,3 +234,23 @@ def test_serve_command_can_enable_a2a_routes(monkeypatch):
 
     assert created == [{"enable_a2a": True}]
     assert calls == [(("app",), {"host": "127.0.0.1", "port": 8000})]
+
+
+def test_serve_command_can_enable_dev_mock_main_agent(monkeypatch):
+    calls = []
+    created = []
+
+    def fake_run(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    def fake_create_app(**kwargs):
+        created.append(kwargs)
+        return "app"
+
+    monkeypatch.setattr("uvicorn.run", fake_run)
+    monkeypatch.setattr("vermay_agent.api.app.create_app", fake_create_app)
+
+    run_serve_command(["--enable-a2a", "--dev-mock-main-agent"])
+
+    assert created == [{"enable_a2a": True, "dev_mock_main_agent": True}]
+    assert calls == [(("app",), {"host": "127.0.0.1", "port": 8000})]

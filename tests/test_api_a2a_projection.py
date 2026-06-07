@@ -51,21 +51,20 @@ def test_project_task_uses_context_id_and_omits_thread_id_from_payload():
 
     assert projection.kind == A2AProjectionKind.TASK
     assert projection.payload == {
-        "task": {
-            "id": "task-1",
-            "contextId": "ctx-1",
-            "status": {
-                "state": "TASK_STATE_WORKING",
-                "timestamp": "2026-06-03T00:00:01+00:00",
-            },
-            "metadata": {
-                "localSessionId": "session-1",
-                "localTaskId": "task-1",
-                "localStatus": "running",
-                "localAttempt": 1,
-                "localRootTaskId": "task-1",
-            },
-        }
+        "kind": "task",
+        "id": "task-1",
+        "contextId": "ctx-1",
+        "status": {
+            "state": "TASK_STATE_WORKING",
+            "timestamp": "2026-06-03T00:00:01+00:00",
+        },
+        "metadata": {
+            "localSessionId": "session-1",
+            "localTaskId": "task-1",
+            "localStatus": "running",
+            "localAttempt": 1,
+            "localRootTaskId": "task-1",
+        },
     }
     assert "thread_id" not in str(projection.payload)
     assert "thread-1" not in str(projection.payload)
@@ -77,8 +76,9 @@ def test_project_task_falls_back_to_session_id_as_context_id():
     projection = project_task(task)
 
     assert projection.payload is not None
-    assert projection.payload["task"]["contextId"] == "session-1"
-    assert projection.payload["task"]["status"]["state"] == "TASK_STATE_COMPLETED"
+    assert projection.payload["kind"] == "task"
+    assert projection.payload["contextId"] == "session-1"
+    assert projection.payload["status"]["state"] == "TASK_STATE_COMPLETED"
 
 
 def test_project_retry_task_includes_local_lineage_metadata():
@@ -93,7 +93,7 @@ def test_project_retry_task_includes_local_lineage_metadata():
     projection = project_task(task, context_id="ctx-1")
 
     assert projection.payload is not None
-    metadata = projection.payload["task"]["metadata"]
+    metadata = projection.payload["metadata"]
     assert metadata["localTaskId"] == "task-2"
     assert metadata["localAttempt"] == 2
     assert metadata["localRootTaskId"] == "task-1"
@@ -108,7 +108,7 @@ def test_project_task_can_include_artifacts_without_thread_id():
 
     assert projection.kind == A2AProjectionKind.TASK
     assert projection.payload is not None
-    assert projection.payload["task"]["artifacts"] == [
+    assert projection.payload["artifacts"] == [
         {
             "artifactId": "final_answer",
             "name": "Final answer",
@@ -130,7 +130,7 @@ def test_project_task_omits_non_projectable_artifacts():
 
     assert projection.kind == A2AProjectionKind.TASK
     assert projection.payload is not None
-    assert "artifacts" not in projection.payload["task"]
+    assert "artifacts" not in projection.payload
 
 
 def test_project_task_requires_matching_artifact_task_id():
@@ -147,21 +147,20 @@ def test_project_task_event_maps_status_update():
 
     assert projection.kind == A2AProjectionKind.STATUS_UPDATE
     assert projection.payload == {
-        "statusUpdate": {
-            "taskId": "task-1",
-            "contextId": "ctx-1",
-            "status": {
-                "state": "TASK_STATE_SUBMITTED",
-                "timestamp": "2026-06-03T00:00:02+00:00",
-            },
-            "metadata": {
-                "localSessionId": "session-1",
-                "localTaskId": "task-1",
-                "localStatus": "queued",
-                "localEventId": 7,
-                "localEventType": "task_queued",
-            },
-        }
+        "kind": "status-update",
+        "taskId": "task-1",
+        "contextId": "ctx-1",
+        "status": {
+            "state": "TASK_STATE_SUBMITTED",
+            "timestamp": "2026-06-03T00:00:02+00:00",
+        },
+        "metadata": {
+            "localSessionId": "session-1",
+            "localTaskId": "task-1",
+            "localStatus": "queued",
+            "localEventId": 7,
+            "localEventType": "task_queued",
+        },
     }
     assert "thread-1" not in str(projection.payload)
 
@@ -185,7 +184,8 @@ def test_project_task_event_maps_cancelled_status_update():
 
     assert projection.kind == A2AProjectionKind.STATUS_UPDATE
     assert projection.payload is not None
-    assert projection.payload["statusUpdate"]["status"]["state"] == "TASK_STATE_CANCELED"
+    assert projection.payload["kind"] == "status-update"
+    assert projection.payload["status"]["state"] == "TASK_STATE_CANCELED"
 
 
 def test_project_task_artifact_projects_a2a_artifact_payload():
@@ -193,14 +193,13 @@ def test_project_task_artifact_projects_a2a_artifact_payload():
 
     assert projection.kind == A2AProjectionKind.ARTIFACT
     assert projection.payload == {
-        "artifact": {
-            "artifactId": "final_answer",
-            "name": "Final answer",
-            "description": "Final text answer returned by the agent.",
-            "parts": [{"text": "done", "mediaType": "text/plain"}],
-            "metadata": final_answer_envelope().to_metadata(),
-            "extensions": [],
-        }
+        "kind": "artifact",
+        "artifactId": "final_answer",
+        "name": "Final answer",
+        "description": "Final text answer returned by the agent.",
+        "parts": [{"text": "done", "mediaType": "text/plain"}],
+        "metadata": final_answer_envelope().to_metadata(),
+        "extensions": [],
     }
     assert "task-1:final_answer" not in str(projection.payload)
 
@@ -210,7 +209,7 @@ def test_project_task_artifact_normalizes_legacy_final_answer_metadata():
 
     assert projection.kind == A2AProjectionKind.ARTIFACT
     assert projection.payload is not None
-    assert projection.payload["artifact"]["metadata"] == final_answer_envelope().to_metadata()
+    assert projection.payload["metadata"] == final_answer_envelope().to_metadata()
 
 
 def test_project_task_artifact_keeps_non_projectable_artifact_internal():
@@ -227,27 +226,26 @@ def test_project_task_artifact_event_maps_artifact_update():
 
     assert projection.kind == A2AProjectionKind.ARTIFACT_UPDATE
     assert projection.payload == {
-        "artifactUpdate": {
-            "taskId": "task-1",
-            "contextId": "ctx-1",
-            "artifact": {
-                "artifactId": "final_answer",
-                "name": "Final answer",
-                "description": "Final text answer returned by the agent.",
-                "parts": [{"text": "done", "mediaType": "text/plain"}],
-                "metadata": final_answer_envelope().to_metadata(),
-                "extensions": [],
-            },
-            "append": False,
-            "lastChunk": True,
-            "metadata": {
-                "localSessionId": "session-1",
-                "localTaskId": "task-1",
-                "localStatus": "completed",
-                "localEventId": 7,
-                "localEventType": "task_artifact_created",
-            },
-        }
+        "kind": "artifact-update",
+        "taskId": "task-1",
+        "contextId": "ctx-1",
+        "artifact": {
+            "artifactId": "final_answer",
+            "name": "Final answer",
+            "description": "Final text answer returned by the agent.",
+            "parts": [{"text": "done", "mediaType": "text/plain"}],
+            "metadata": final_answer_envelope().to_metadata(),
+            "extensions": [],
+        },
+        "append": False,
+        "lastChunk": True,
+        "metadata": {
+            "localSessionId": "session-1",
+            "localTaskId": "task-1",
+            "localStatus": "completed",
+            "localEventId": 7,
+            "localEventType": "task_artifact_created",
+        },
     }
     assert "task-1:final_answer" not in str(projection.payload)
     assert "thread-1" not in str(projection.payload)
@@ -271,7 +269,8 @@ def test_project_task_artifact_event_falls_back_to_artifact_context_id():
     projection = project_task_artifact_event(event, artifact=_artifact(context_id="artifact-ctx"))
 
     assert projection.payload is not None
-    assert projection.payload["artifactUpdate"]["contextId"] == "artifact-ctx"
+    assert projection.payload["kind"] == "artifact-update"
+    assert projection.payload["contextId"] == "artifact-ctx"
 
 
 def test_project_task_artifact_event_ignores_non_artifact_events():

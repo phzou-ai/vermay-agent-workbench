@@ -108,3 +108,55 @@ def test_permission_policy_requires_approval_for_sensitive_read_file_path():
     assert "sensitive path" in decision.reason
     assert decision.safe_argument_preview == {"path": ".env.local"}
     assert "sensitive_path" in decision.policy_tags
+
+
+def test_permission_policy_enriches_shell_approval_prompt():
+    registry = ToolRegistry()
+    register_devops_tools(registry)
+
+    decision = PermissionPolicy(registry).check(
+        ToolCall(name="exec_shell", arguments={"command": "rm -rf /tmp/example"})
+    )
+
+    assert decision.requires_approval is True
+    assert decision.approval_summary == "Run local shell command: rm -rf /tmp/example"
+    assert decision.safe_argument_preview == {
+        "command_preview": "rm -rf /tmp/example",
+        "command_chars": 19,
+    }
+    assert "shell" in decision.policy_tags
+    assert "unknown" in decision.policy_tags
+
+
+def test_permission_policy_enriches_kubectl_apply_approval_prompt():
+    registry = ToolRegistry()
+    register_devops_tools(registry)
+    manifest = "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: app-config\n"
+
+    decision = PermissionPolicy(registry).check(ToolCall(name="kubectl_apply", arguments={"manifest": manifest}))
+
+    assert decision.requires_approval is True
+    assert decision.approval_summary == "Apply Kubernetes manifest (4 non-empty manifest lines)"
+    assert decision.safe_argument_preview == {
+        "manifest_preview": manifest,
+        "manifest_chars": len(manifest),
+        "manifest_lines": 4,
+    }
+    assert "kubernetes" in decision.policy_tags
+    assert "remote" in decision.policy_tags
+    assert "credential_sensitive" in decision.policy_tags
+
+
+def test_permission_policy_enriches_delete_resource_approval_prompt():
+    registry = ToolRegistry()
+    register_devops_tools(registry)
+
+    decision = PermissionPolicy(registry).check(
+        ToolCall(name="delete_resource", arguments={"resource": "deployment", "name": "api"})
+    )
+
+    assert decision.requires_approval is True
+    assert decision.risk_level == "high"
+    assert decision.approval_summary == "Delete Kubernetes deployment: api"
+    assert decision.safe_argument_preview == {"resource": "deployment", "name": "api"}
+    assert "destructive" in decision.policy_tags
