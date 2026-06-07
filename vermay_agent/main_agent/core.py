@@ -209,6 +209,25 @@ class MainAgentCore:
             self.store.append_task_event(task_id=task_id, type="task_completed", status=TaskStatus.COMPLETED)
             return task
 
+        if result.status in {
+            TaskStatus.CREATED,
+            TaskStatus.QUEUED,
+            TaskStatus.RUNNING,
+            TaskStatus.CANCEL_REQUESTED,
+            TaskStatus.INPUT_REQUIRED,
+            TaskStatus.AUTH_REQUIRED,
+        }:
+            if result.status == TaskStatus.RUNNING:
+                return task
+            active = self.store.update_task_status(task_id, result.status)
+            self.store.append_task_event(
+                task_id=task_id,
+                type=_task_event_type_for_status(result.status),
+                status=result.status,
+                payload=_task_result_error_payload(result),
+            )
+            return active
+
         failed = self.store.update_task_status(
             task_id,
             TaskStatus.FAILED,
@@ -356,6 +375,26 @@ def _remote_task_status(status: str | None) -> TaskStatus:
     if status in {"auth-required", "TASK_STATE_AUTH_REQUIRED"}:
         return TaskStatus.AUTH_REQUIRED
     return TaskStatus.FAILED
+
+
+def _task_event_type_for_status(status: TaskStatus) -> str:
+    return {
+        TaskStatus.CREATED: "task_created",
+        TaskStatus.QUEUED: "task_queued",
+        TaskStatus.RUNNING: "task_started",
+        TaskStatus.CANCEL_REQUESTED: "task_cancel_requested",
+        TaskStatus.INPUT_REQUIRED: "task_interrupted",
+        TaskStatus.AUTH_REQUIRED: "task_interrupted",
+    }.get(status, "task_updated")
+
+
+def _task_result_error_payload(result: LocalTaskRunResult) -> dict:
+    payload: dict = {}
+    if result.error_code:
+        payload["error_code"] = result.error_code
+    if result.error_message:
+        payload["error_message"] = result.error_message
+    return payload
 
 
 def _new_id(prefix: str) -> str:

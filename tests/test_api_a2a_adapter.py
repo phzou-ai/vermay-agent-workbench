@@ -295,6 +295,40 @@ def test_create_app_dev_mock_main_agent_supports_a2a_message_task_get_and_subscr
     assert "Dev mock task completed: run mock task" in subscribed.text
 
 
+def test_create_app_dev_mock_main_agent_can_hold_and_cancel_task(tmp_path, monkeypatch):
+    monkeypatch.setattr("vermay_agent.api.app.DEFAULT_AGENT_STORE_PATH", tmp_path / "agent.sqlite")
+
+    with TestClient(create_app(enable_a2a=True, dev_mock_main_agent=True)) as client:
+        task_response = client.post(
+            "/message:send",
+            json={
+                "jsonrpc": "2.0",
+                "id": "req-task",
+                "method": "message/send",
+                "params": {
+                    "message": {
+                        "kind": "message",
+                        "role": "user",
+                        "messageId": "msg-dev-task",
+                        "parts": [{"kind": "text", "text": "__dev_mock_hold_task__"}],
+                    },
+                    "metadata": {"executionMode": "task"},
+                },
+            },
+        )
+        task_id = task_response.json()["result"]["id"]
+        canceled = client.post(f"/tasks/{task_id}:cancel", json={"reason": "operator requested"})
+        subscribed = client.post(f"/tasks/{task_id}:subscribe")
+
+    assert task_response.status_code == 200
+    assert task_response.json()["result"]["kind"] == "task"
+    assert task_response.json()["result"]["status"]["state"] == "working"
+    assert canceled.status_code == 200
+    assert canceled.json()["result"]["status"]["state"] == "canceled"
+    assert subscribed.status_code == 200
+    assert "task_cancelled" in subscribed.text
+
+
 def test_a2a_jsonrpc_message_send_can_return_main_agent_message_without_task(tmp_path):
     agent_store = AgentStore(tmp_path / "agent.sqlite")
     main_store = MainAgentStore(agent_store)

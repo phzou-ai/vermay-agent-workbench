@@ -128,7 +128,7 @@ class A2AAdapter:
             updated = self.main_agent_core.store.update_task_status(task_id, MainAgentTaskStatus.CANCELED)
             self.main_agent_core.store.append_task_event(
                 task_id=task_id,
-                type="task_canceled",
+                type="task_cancelled",
                 status=MainAgentTaskStatus.CANCELED,
                 payload={"reason": reason} if reason else {},
             )

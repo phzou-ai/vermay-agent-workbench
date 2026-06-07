@@ -147,6 +147,13 @@ def create_app(
             raise HTTPException(status_code=404, detail={"code": "context_not_found", "message": "context not found"})
         return [_message_to_dict(record) for record in core.store.list_context_messages(context_id, limit=limit)]
 
+    @api_router.get("/contexts/{context_id}/tasks")
+    def list_context_tasks(context_id: str) -> list[dict[str, Any]]:
+        core = _main_agent_core(app)
+        if core.store.get_context(context_id) is None:
+            raise HTTPException(status_code=404, detail={"code": "context_not_found", "message": "context not found"})
+        return [_task_to_dict(record) for record in core.store.list_context_tasks(context_id)]
+
     @api_router.get("/contexts/{context_id}/route-decisions")
     def list_context_route_decisions(context_id: str) -> list[dict[str, Any]]:
         core = _main_agent_core(app)
@@ -293,6 +300,27 @@ def _message_to_dict(record) -> dict[str, Any]:
         "task_id": record.task_id,
         "metadata": record.metadata,
         "created_at": record.created_at,
+    }
+
+
+def _task_to_dict(record) -> dict[str, Any]:
+    return {
+        "task_id": record.task_id,
+        "context_id": record.context_id,
+        "status": record.status.value,
+        "input_message_id": record.input_message_id,
+        "output_message_id": record.output_message_id,
+        "runtime_thread_id": record.runtime_thread_id,
+        "assigned_agent_id": record.assigned_agent_id,
+        "retry_of_task_id": record.retry_of_task_id,
+        "attempt": record.attempt,
+        "model": record.model,
+        "max_loops": record.max_loops,
+        "mcp": record.mcp,
+        "error_code": record.error_code,
+        "error_message": record.error_message,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
     }
 
 

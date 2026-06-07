@@ -16,6 +16,8 @@ class DevMockLocalMessageResponder:
 class DevMockLocalTaskRunner:
     def run(self, messages: list[MessageRecord], *, thread_id: str) -> LocalTaskRunResult:
         text = _latest_user_text(messages) or "No task input provided."
+        if "__dev_mock_hold_task__" in text:
+            return LocalTaskRunResult(status=TaskStatus.RUNNING)
         return LocalTaskRunResult(
             status=TaskStatus.COMPLETED,
             parts=[{"kind": "text", "text": f"Dev mock task completed: {text}"}],

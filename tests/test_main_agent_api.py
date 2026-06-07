@@ -94,6 +94,39 @@ def test_main_agent_context_api_lists_messages_and_deletes_context(tmp_path):
     agent_store.close()
 
 
+def test_main_agent_context_api_lists_tasks(tmp_path):
+    client, agent_store, service, _core = make_client(tmp_path)
+    sent = client.post(
+        "/message:send",
+        json={
+            "jsonrpc": "2.0",
+            "id": "req-task-1",
+            "method": "message/send",
+            "params": {
+                "message": {
+                    "kind": "message",
+                    "role": "user",
+                    "messageId": "msg-task-user-1",
+                    "parts": [{"kind": "text", "text": "run task"}],
+                },
+                "metadata": {"executionMode": "task"},
+            },
+        },
+    )
+    context_id = sent.json()["result"]["contextId"]
+    task_id = sent.json()["result"]["id"]
+
+    tasks = client.get(f"/api/contexts/{context_id}/tasks")
+
+    assert tasks.status_code == 200
+    assert tasks.json()[0]["task_id"] == task_id
+    assert tasks.json()[0]["context_id"] == context_id
+    assert tasks.json()[0]["status"] == "created"
+    assert tasks.json()[0]["input_message_id"] == "msg-task-user-1"
+    service.close()
+    agent_store.close()
+
+
 def test_main_agent_registered_agent_api_crud(tmp_path):
     client, agent_store, service, _core = make_client(tmp_path)
 

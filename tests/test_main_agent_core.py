@@ -301,6 +301,39 @@ def test_main_agent_core_local_task_runner_failure_marks_task_failed(tmp_path):
     ]
 
 
+def test_main_agent_core_local_task_runner_can_leave_task_running(tmp_path):
+    class RunningRunner:
+        def run(self, messages: list[MessageRecord], *, thread_id: str) -> LocalTaskRunResult:
+            return LocalTaskRunResult(status=TaskStatus.RUNNING)
+
+    store = MainAgentStore(AgentStore(tmp_path / "agent.sqlite"))
+    core = MainAgentCore(
+        store=store,
+        local_message_responder=FakeResponder(),
+        local_task_runner=RunningRunner(),
+    )
+    context = store.create_context(context_id="ctx-1")
+
+    result = core.handle_message(
+        MainAgentRequest(
+            context_id=context.context_id,
+            message_id="msg-user-1",
+            role=MessageRole.USER,
+            parts=[{"kind": "text", "text": "run and hold"}],
+            metadata={"executionMode": "task"},
+        )
+    )
+
+    task = store.get_task(result.task_id)
+    assert task is not None
+    assert task.status == TaskStatus.RUNNING
+    assert task.output_message_id is None
+    assert [event.type for event in store.list_task_events(result.task_id)] == [
+        "task_created",
+        "task_started",
+    ]
+
+
 def test_main_agent_core_unknown_context_is_rejected(tmp_path):
     store = MainAgentStore(AgentStore(tmp_path / "agent.sqlite"))
     core = MainAgentCore(store=store, local_message_responder=FakeResponder())
