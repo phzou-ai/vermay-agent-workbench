@@ -67,3 +67,20 @@ def test_load_prefixed_env_with_legacy_aliases_prefers_new_prefix(tmp_path: Path
     )
 
     assert values["VERMAY_AGENT_SSH_HOST"] == "new-file-host"
+
+
+def test_load_prefixed_env_with_legacy_aliases_uses_legacy_local_over_new_default_template(
+    tmp_path: Path, monkeypatch
+):
+    monkeypatch.delenv("VERMAY_AGENT_SSH_HOST", raising=False)
+    monkeypatch.delenv("MINI_AGENT_SSH_HOST", raising=False)
+    (tmp_path / ".env").write_text("VERMAY_AGENT_SSH_HOST=user@example-host\n", encoding="utf-8")
+    (tmp_path / ".env.local").write_text("MINI_AGENT_SSH_HOST=real-host\n", encoding="utf-8")
+
+    values = load_prefixed_env_with_legacy_aliases(
+        "VERMAY_AGENT_SSH_",
+        legacy_prefixes=("MINI_AGENT_SSH_",),
+        root=tmp_path,
+    )
+
+    assert values["VERMAY_AGENT_SSH_HOST"] == "real-host"
