@@ -53,7 +53,7 @@ POST /tasks/{task_id}:subscribe
 POST /tasks/{task_id}:cancel
 ```
 
-Known first-party compatibility usage includes backend smoke tests, backend compatibility tests, and current child-agent delegation in `vermay_agent/main_agent/remote_agent.py`.
+Known first-party compatibility usage includes backend smoke tests and backend compatibility tests. Child-agent delegation in `vermay_agent/main_agent/remote_agent.py` uses `/rpc`.
 
 ## JSON-RPC Methods
 

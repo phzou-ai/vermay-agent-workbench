@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from typing import Any, Protocol
-from urllib.parse import quote, urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 from .models import MainAgentRequest, RegisteredAgentRecord
@@ -68,7 +68,7 @@ class DirectA2ARemoteAgentClient:
         payload = {
             "jsonrpc": "2.0",
             "id": f"delegate-{message_id}",
-            "method": "message/send",
+            "method": "SendMessage",
             "params": {
                 "message": {
                     "kind": "message",
@@ -81,7 +81,7 @@ class DirectA2ARemoteAgentClient:
             },
         }
         http_request = Request(
-            _message_send_url(agent.card_url),
+            _rpc_url(agent.card_url),
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json", "Accept": "application/json"},
             method="POST",
@@ -94,11 +94,18 @@ class DirectA2ARemoteAgentClient:
         return _remote_result_from_payload(result, raw=body)
 
     def get_task(self, *, agent: RegisteredAgentRecord, task_id: str) -> RemoteAgentTaskSnapshot:
+        payload = {
+            "jsonrpc": "2.0",
+            "id": f"get-remote-task-{task_id}",
+            "method": "GetTask",
+            "params": {"id": task_id},
+        }
         with urlopen(
             Request(
-                _task_url(agent.card_url, task_id),
-                headers={"Accept": "application/json"},
-                method="GET",
+                _rpc_url(agent.card_url),
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json", "Accept": "application/json"},
+                method="POST",
             ),
             timeout=self.timeout_seconds,
         ) as response:
@@ -112,9 +119,18 @@ class DirectA2ARemoteAgentClient:
         task_id: str,
         reason: str | None = None,
     ) -> RemoteAgentTaskSnapshot:
-        payload = {"reason": reason} if reason else {}
+        payload = {
+            "jsonrpc": "2.0",
+            "id": f"cancel-remote-task-{task_id}",
+            "method": "CancelTask",
+            "params": {
+                "id": task_id,
+            },
+        }
+        if reason:
+            payload["params"]["reason"] = reason
         http_request = Request(
-            _task_cancel_url(agent.card_url, task_id),
+            _rpc_url(agent.card_url),
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json", "Accept": "application/json"},
             method="POST",
@@ -135,16 +151,8 @@ def fetch_agent_card(card_url: str, *, timeout_seconds: float = 10.0) -> dict[st
     return body
 
 
-def _message_send_url(card_url: str) -> str:
-    return _root_url(card_url).rstrip("/") + "/message:send"
-
-
-def _task_url(card_url: str, task_id: str) -> str:
-    return _root_url(card_url).rstrip("/") + f"/tasks/{quote(task_id, safe='')}"
-
-
-def _task_cancel_url(card_url: str, task_id: str) -> str:
-    return _root_url(card_url).rstrip("/") + f"/tasks/{quote(task_id, safe='')}:cancel"
+def _rpc_url(card_url: str) -> str:
+    return _root_url(card_url).rstrip("/") + "/rpc"
 
 
 def _root_url(card_url: str) -> str:
