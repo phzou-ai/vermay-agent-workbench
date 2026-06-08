@@ -3,6 +3,9 @@ set -euo pipefail
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8000}"
 BFF_URL="${BFF_URL:-}"
+CHILD_AGENT_A2A_BASE_URL="${CHILD_AGENT_A2A_BASE_URL:-}"
+CHILD_AGENT_CARD_URL="${CHILD_AGENT_CARD_URL:-}"
+CHILD_AGENT_ID="${CHILD_AGENT_ID:-}"
 RUN_ID="${RUN_ID:-$(date +%s)-$$-${RANDOM:-0}}"
 
 json_value() {
@@ -68,6 +71,25 @@ print(json.dumps({
         },
         "metadata": {"executionMode": execution_mode},
     },
+}, separators=(",", ":")))
+PY
+}
+
+registered_agent_payload() {
+  local agent_id="$1"
+  local name="$2"
+  local card_url="$3"
+  python - "$agent_id" "$name" "$card_url" <<'PY'
+import json
+import sys
+
+agent_id, name, card_url = sys.argv[1:4]
+print(json.dumps({
+    "agent_id": agent_id,
+    "name": name,
+    "card_url": card_url,
+    "enabled": True,
+    "metadata": {"keywords": ["child-smoke"]},
 }, separators=(",", ":")))
 PY
 }
@@ -180,6 +202,53 @@ echo "A2A backend smoke passed: task=$task_id"
 require_http_status 404 "$BASE_URL/api/sessions"
 require_http_status 404 "$BASE_URL/api/tasks/$task_id"
 require_http_status 404 "$BASE_URL/api/tasks/$task_id/events"
+
+if [[ -n "$CHILD_AGENT_A2A_BASE_URL" ]]; then
+  child_agent_base="${CHILD_AGENT_A2A_BASE_URL%/}"
+  child_agent_id="${CHILD_AGENT_ID:-agent-child-smoke-$RUN_ID}"
+  child_agent_card_url="${CHILD_AGENT_CARD_URL:-$child_agent_base/.well-known/agent-card.json}"
+
+  echo "Checking registered child-agent delegation: child=$child_agent_base"
+
+  post_json "$BASE_URL/api/registered-agents" "$(
+    registered_agent_payload "$child_agent_id" "Smoke child agent" "$child_agent_card_url"
+  )" >/dev/null
+
+  child_delegate_response="$(
+    post_json "$BASE_URL/rpc" "$(
+      message_send_payload "rpc-child-smoke-$RUN_ID" "msg-rpc-child-smoke-$RUN_ID" "delegate smoke via child agent" "message" \
+        | python -c 'import json, sys
+target_agent_id = sys.argv[1]
+payload = json.load(sys.stdin)
+payload["method"] = "SendMessage"
+payload["params"]["metadata"]["route"] = "remote_agent"
+payload["params"]["metadata"]["targetAgentId"] = target_agent_id
+print(json.dumps(payload, separators=(",", ":")))' "$child_agent_id"
+    )"
+  )"
+  child_delegate_kind="$(printf '%s' "$child_delegate_response" | json_value "result.kind")"
+  child_delegate_route_kind="$(printf '%s' "$child_delegate_response" | json_value "result.metadata.routeKind")"
+  child_delegate_remote_agent_id="$(printf '%s' "$child_delegate_response" | json_value "result.metadata.remoteAgentId")"
+  child_delegate_context_id="$(printf '%s' "$child_delegate_response" | json_value "result.contextId")"
+  if [[ "$child_delegate_kind" != "message" || "$child_delegate_route_kind" != "remote_agent" ]]; then
+    echo "expected child delegation message result, got: $child_delegate_response" >&2
+    exit 1
+  fi
+  if [[ "$child_delegate_remote_agent_id" != "$child_agent_id" ]]; then
+    echo "child delegation remote agent mismatch: expected=$child_agent_id got=$child_delegate_remote_agent_id" >&2
+    exit 1
+  fi
+
+  child_delegations="$(curl -fsS "$BASE_URL/api/contexts/$child_delegate_context_id/delegations")"
+  printf '%s' "$child_delegations" | python -c 'import json, sys
+delegations = json.load(sys.stdin)
+target_agent_id = sys.argv[1]
+if not any(item.get("remote_agent_id") == target_agent_id for item in delegations):
+    raise SystemExit(f"expected delegation for {target_agent_id}, got: {delegations}")' "$child_agent_id"
+
+  curl -fsS -X DELETE "$BASE_URL/api/registered-agents/$child_agent_id" >/dev/null || true
+  echo "A2A child-agent delegation smoke passed: child=$child_agent_id"
+fi
 
 if [[ -n "$BFF_URL" ]]; then
   echo "A2A BFF smoke: bff=$BFF_URL"

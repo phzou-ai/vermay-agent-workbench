@@ -77,6 +77,22 @@ POST /tasks/{task_id}:cancel
 
 Keep smoke coverage for both `/rpc` and path-style routes until a later cleanup milestone explicitly changes route behavior.
 
+Run the default smoke against one dev-mock main agent:
+
+```bash
+scripts/a2a_dev_smoke.sh
+```
+
+To include registered child-agent delegation, start a second dev-mock A2A server on another port and pass it as the child endpoint:
+
+```bash
+BASE_URL=http://127.0.0.1:8000 \
+CHILD_AGENT_A2A_BASE_URL=http://127.0.0.1:8001 \
+scripts/a2a_dev_smoke.sh
+```
+
+Use separate main and child processes for this check; the main agent synchronously calls the child agent over HTTP.
+
 Send a model-backed local message:
 
 ```bash

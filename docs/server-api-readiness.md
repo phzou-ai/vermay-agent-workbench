@@ -306,6 +306,16 @@ BFF_URL=http://localhost:3000 scripts/a2a_dev_smoke.sh
 
 The smoke script covers both `/rpc` and path-style compatibility routes while deprecation-only burn-in continues.
 
+Optional child-agent delegation smoke:
+
+```bash
+BASE_URL=http://127.0.0.1:8000 \
+CHILD_AGENT_A2A_BASE_URL=http://127.0.0.1:8001 \
+scripts/a2a_dev_smoke.sh
+```
+
+Use a separate child-agent process/port for this check. Do not point `CHILD_AGENT_A2A_BASE_URL` at the same single-process server as `BASE_URL`; the main-agent request synchronously calls the child agent over HTTP.
+
 ## Current Boundaries
 
 - `/rpc` supports single-request JSON-RPC only.
