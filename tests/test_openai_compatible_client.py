@@ -125,3 +125,31 @@ def test_openai_compatible_client_preserves_returned_tool_call_id(monkeypatch):
     assert response.tool_call.id == "call-1"
     assert response.tool_call.name == "echo"
     assert response.tool_call.arguments == {"value": "hi"}
+
+
+def test_openai_compatible_client_parses_embedded_json_tool_action(monkeypatch):
+    def fake_urlopen(request, timeout):
+        return FakeResponse(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                "Let me use the local mock data.\n\n"
+                                '{"action":"tool_call","name":"kubectl_get","arguments":{"resource":"pods"}}'
+                            )
+                        }
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    client = OpenAICompatibleModelClient(model="qwen", base_url="http://localhost:8000/v1")
+    response = client.invoke([Message(role="user", content="check k8s")], tools=[{"name": "kubectl_get"}])
+
+    assert response.content == "Calling tool kubectl_get."
+    assert response.tool_call is not None
+    assert response.tool_call.name == "kubectl_get"
+    assert response.tool_call.arguments == {"resource": "pods"}

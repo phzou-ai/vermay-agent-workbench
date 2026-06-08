@@ -22,6 +22,17 @@ def test_parse_tool_call_action():
     assert response.tool_call.arguments == {"pattern": "error"}
 
 
+def test_parse_embedded_tool_call_action():
+    response = parse(
+        'Let me use the local mock data.\n\n{"action":"tool_call","name":"kubectl_get","arguments":{"resource":"pods"}}'
+    )
+
+    assert response.content == "Calling tool kubectl_get."
+    assert response.tool_call is not None
+    assert response.tool_call.name == "kubectl_get"
+    assert response.tool_call.arguments == {"resource": "pods"}
+
+
 def test_parse_plain_markdown_as_final_answer():
     response = parse("## Status\nAll pods are running.")
 

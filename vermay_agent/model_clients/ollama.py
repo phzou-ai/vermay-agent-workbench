@@ -4,6 +4,7 @@ import json
 import urllib.error
 import urllib.request
 
+from .json_decision import parse_json_decision
 from vermay_agent.types import Message, ModelResponse, ToolCall
 
 
@@ -74,33 +75,11 @@ class OllamaModelClient:
         return f"Ollama request failed: HTTP {exc.code} {exc.reason}{detail}"
 
     def _parse_content(self, content: str) -> ModelResponse:
-        normalized = content.strip()
-        if normalized.startswith("```"):
-            lines = normalized.splitlines()
-            if len(lines) >= 3 and lines[0].startswith("```") and lines[-1].strip() == "```":
-                normalized = "\n".join(lines[1:-1]).strip()
-
-        try:
-            decision = json.loads(normalized)
-        except json.JSONDecodeError:
-            decision = self._parse_first_json_object(normalized)
-            if decision is None:
-                return ModelResponse(content=content)
+        decision = parse_json_decision(content)
+        if decision is None:
+            return ModelResponse(content=content)
 
         return self._parse_decision(decision)
-
-    def _parse_first_json_object(self, content: str) -> dict | None:
-        if not content.startswith("{"):
-            return None
-        try:
-            decision, _ = json.JSONDecoder().raw_decode(content)
-        except json.JSONDecodeError:
-            return None
-        if not isinstance(decision, dict):
-            return None
-        if "action" not in decision:
-            return None
-        return decision
 
     def _to_ollama_messages(self, messages: list[Message], tools: list[dict]) -> list[dict[str, str]]:
         protocol = {

@@ -501,6 +501,23 @@ def test_ollama_adapter_returns_thin_ai_message_wrapper():
     assert project_client.calls[0][1] == tool_schemas_from_tools([tool])
 
 
+def test_ollama_adapter_extracts_embedded_json_tool_call():
+    project_client = FakeProjectModelClient(
+        OllamaModelClient()._parse_content(
+            'Let me use a tool.\n\n{"action":"tool_call","name":"echo","arguments":{"value":"hello"}}'
+        )
+    )
+    adapter = OllamaModelAdapter(client=project_client)
+    tool = make_echo_tool()
+
+    response = adapter.invoke([SystemMessage(content="system"), HumanMessage(content="hello")], tools=[tool])
+
+    assert response.message.content == "Calling tool echo."
+    assert response.message.tool_calls[0]["name"] == "echo"
+    assert response.message.tool_calls[0]["args"] == {"value": "hello"}
+    assert project_client.calls[0][1] == tool_schemas_from_tools([tool])
+
+
 def test_ollama_adapter_uses_tools_argument_for_each_invocation():
     project_client = FakeProjectModelClient(OllamaModelClient()._parse_content('{"action":"final","content":"ok"}'))
     adapter = OllamaModelAdapter(client=project_client)

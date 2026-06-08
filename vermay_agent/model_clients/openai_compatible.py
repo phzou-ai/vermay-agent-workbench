@@ -5,6 +5,7 @@ import os
 import urllib.error
 import urllib.request
 
+from .json_decision import parse_json_decision
 from vermay_agent.types import Message, ModelResponse, ToolCall
 
 
@@ -138,16 +139,8 @@ def _to_openai_tool(tool: dict) -> dict:
 
 
 def _parse_json_action(content: str) -> ModelResponse | None:
-    normalized = content.strip()
-    if normalized.startswith("```"):
-        lines = normalized.splitlines()
-        if len(lines) >= 3 and lines[0].startswith("```") and lines[-1].strip() == "```":
-            normalized = "\n".join(lines[1:-1]).strip()
-    try:
-        decision = json.loads(normalized)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(decision, dict):
+    decision = parse_json_decision(content)
+    if decision is None:
         return None
     if decision.get("action") == "tool_call":
         name = decision.get("name")
