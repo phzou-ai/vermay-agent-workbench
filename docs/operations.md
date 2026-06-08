@@ -63,7 +63,19 @@ POST /tasks/{task_id}:subscribe
 POST /tasks/{task_id}:cancel
 ```
 
-Prefer `/rpc` for new integrations. Path-style A2A routes remain compatibility routes during burn-in.
+Prefer `/rpc` for new integrations. Path-style A2A routes remain operational for compatibility, but they are deprecated for new first-party client work.
+
+Current compatibility routes kept for burn-in:
+
+```text
+POST /message:send
+POST /message:stream
+GET  /tasks/{task_id}
+POST /tasks/{task_id}:subscribe
+POST /tasks/{task_id}:cancel
+```
+
+Keep smoke coverage for both `/rpc` and path-style routes until a later cleanup milestone explicitly changes route behavior.
 
 Send a model-backed local message:
 

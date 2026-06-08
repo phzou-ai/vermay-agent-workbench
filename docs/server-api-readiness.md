@@ -41,7 +41,19 @@ POST /tasks/{task_id}:subscribe
 POST /tasks/{task_id}:cancel
 ```
 
-Prefer `/rpc` for new clients. Path-style A2A routes remain compatibility routes during the current burn-in phase and should not be removed without a dedicated cleanup milestone.
+Prefer `/rpc` for new clients. Path-style A2A routes remain operational for compatibility, but they are deprecated for new first-party client work and should not be removed without a dedicated cleanup milestone.
+
+Current compatibility routes kept for burn-in:
+
+```text
+POST /message:send
+POST /message:stream
+GET  /tasks/{task_id}
+POST /tasks/{task_id}:subscribe
+POST /tasks/{task_id}:cancel
+```
+
+Known first-party compatibility usage includes backend smoke tests, backend compatibility tests, and current child-agent delegation in `vermay_agent/main_agent/remote_agent.py`.
 
 ## JSON-RPC Methods
 
@@ -57,7 +69,7 @@ CancelTask
 SubscribeToTask
 ```
 
-Transitional aliases remain accepted during burn-in:
+Transitional aliases remain accepted during burn-in, but canonical method names should be used for new callers:
 
 ```text
 message/send
@@ -148,7 +160,7 @@ curl -X POST http://127.0.0.1:8000/rpc \
   -d '{"jsonrpc":"2.0","id":"req-get-1","method":"GetTask","params":{"id":"<task-id>"}}'
 ```
 
-Path-style compatibility remains available:
+Path-style compatibility remains available for existing callers, but new clients should use `/rpc` `GetTask`:
 
 ```bash
 curl http://127.0.0.1:8000/tasks/<task-id>
@@ -164,7 +176,7 @@ curl -N -X POST http://127.0.0.1:8000/rpc \
   -d '{"jsonrpc":"2.0","id":"req-subscribe-1","method":"SubscribeToTask","params":{"id":"<task-id>","afterEventId":0}}'
 ```
 
-Path-style compatibility remains available:
+Path-style compatibility remains available for existing callers, but new clients should use `/rpc` `SubscribeToTask`:
 
 ```bash
 curl -N -X POST http://127.0.0.1:8000/tasks/<task-id>:subscribe
@@ -191,7 +203,7 @@ curl -X POST http://127.0.0.1:8000/rpc \
   -d '{"jsonrpc":"2.0","id":"req-cancel-1","method":"CancelTask","params":{"id":"<task-id>","reason":"operator requested"}}'
 ```
 
-Path-style compatibility remains available:
+Path-style compatibility remains available for existing callers, but new clients should use `/rpc` `CancelTask`:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/tasks/<task-id>:cancel \
@@ -292,12 +304,12 @@ Deterministic smoke gate:
 BFF_URL=http://localhost:3000 scripts/a2a_dev_smoke.sh
 ```
 
-The smoke script covers both `/rpc` and path-style compatibility routes during burn-in.
+The smoke script covers both `/rpc` and path-style compatibility routes while deprecation-only burn-in continues.
 
 ## Current Boundaries
 
 - `/rpc` supports single-request JSON-RPC only.
 - JSON-RPC batch requests are rejected.
-- Path-style A2A routes are compatibility routes during burn-in.
+- Path-style A2A routes remain operational compatibility routes, but they are deprecated for new first-party client work.
 - Retry/resume are not currently reintroduced as public A2A routes.
 - The local default server has no authentication.

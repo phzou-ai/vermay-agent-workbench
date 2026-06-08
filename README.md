@@ -201,7 +201,19 @@ POST /tasks/<task-id>:cancel
 POST /tasks/<task-id>:subscribe
 ```
 
-Prefer `/rpc` for new browser and service integrations. Path-style A2A routes remain compatibility routes during the current burn-in phase.
+Prefer `/rpc` for new browser and service integrations. Path-style A2A routes remain operational for compatibility, but they are deprecated for new first-party client work.
+
+Current compatibility routes kept for burn-in:
+
+```text
+POST /message:send
+POST /message:stream
+GET  /tasks/<task-id>
+POST /tasks/<task-id>:cancel
+POST /tasks/<task-id>:subscribe
+```
+
+Do not build new Web UI or service clients directly on those path-style task routes unless the caller specifically needs compatibility with an A2A peer that does not support `/rpc`.
 
 Send a local message through `/rpc`:
 
