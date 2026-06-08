@@ -38,17 +38,19 @@ Use a different port:
 vermay-agent serve --host 127.0.0.1 --port 9000
 ```
 
-Enable the A2A-first main-agent service surface:
+The local server exposes the A2A-first main-agent service surface by default:
 
 ```bash
-vermay-agent serve --enable-a2a
+vermay-agent serve
 ```
 
 Use deterministic development responders for UI and protocol smoke tests:
 
 ```bash
-vermay-agent serve --enable-a2a --dev-mock-main-agent
+vermay-agent serve --dev-mock-main-agent
 ```
+
+Use `--disable-a2a` only when you explicitly need management APIs without public A2A routes.
 
 Current public A2A service boundary:
 

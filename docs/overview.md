@@ -64,8 +64,8 @@ CLI input
 - API task lifecycle events can be streamed through a local SSE endpoint backed by persisted `task_events`.
 - API artifact events are compact references and do not include final answer text.
 - API lifecycle events are compact service-level records written through a lifecycle observer; they do not include raw user input, model output, graph state, final answer text, or full tool output.
-- API task/status/artifact metadata has local A2A projection helpers. A2A routes are not exposed by default and are available only when the server is started with `--enable-a2a`.
-- Optional A2A routes can be enabled explicitly with `vermay-agent serve --enable-a2a`; they remain an API-edge adapter and do not alter LangGraph runtime internals.
+- API task/status/artifact metadata has local A2A projection helpers. `vermay-agent serve` exposes the A2A-first service boundary by default.
+- A2A routes remain an API-edge adapter and do not alter LangGraph runtime internals. Use `vermay-agent serve --disable-a2a` only when you explicitly need management APIs without public A2A routes.
 - The local metadata schema currently records version `6` through ordered schema migrations.
 - API lifecycle errors are classified through a shared project error taxonomy before response mapping and failed-task persistence.
 - Local trace outputs are not intended for Git.

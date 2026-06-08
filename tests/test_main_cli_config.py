@@ -186,13 +186,33 @@ def test_trace_path_preserves_absolute_values(tmp_path):
 
 def test_serve_command_runs_uvicorn_with_local_defaults(monkeypatch):
     calls = []
+    created = []
+
+    def fake_run(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    def fake_create_app(**kwargs):
+        created.append(kwargs)
+        return "app"
+
+    monkeypatch.setattr("uvicorn.run", fake_run)
+    monkeypatch.setattr("vermay_agent.api.app.create_app", fake_create_app)
+
+    run_serve_command([])
+
+    assert created == [{"enable_a2a": True}]
+    assert calls == [(("app",), {"host": "127.0.0.1", "port": 8000})]
+
+
+def test_serve_command_can_disable_a2a_routes(monkeypatch):
+    calls = []
 
     def fake_run(*args, **kwargs):
         calls.append((args, kwargs))
 
     monkeypatch.setattr("uvicorn.run", fake_run)
 
-    run_serve_command([])
+    run_serve_command(["--disable-a2a"])
 
     assert calls == [
         (
@@ -234,6 +254,11 @@ def test_serve_command_can_enable_a2a_routes(monkeypatch):
 
     assert created == [{"enable_a2a": True}]
     assert calls == [(("app",), {"host": "127.0.0.1", "port": 8000})]
+
+
+def test_serve_command_rejects_conflicting_a2a_flags():
+    with pytest.raises(SystemExit, match="--enable-a2a and --disable-a2a cannot be used together"):
+        run_serve_command(["--enable-a2a", "--disable-a2a"])
 
 
 def test_serve_command_can_enable_dev_mock_main_agent(monkeypatch):

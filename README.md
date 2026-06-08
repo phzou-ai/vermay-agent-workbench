@@ -175,10 +175,10 @@ Override host or port:
 vermay-agent serve --host 127.0.0.1 --port 9000
 ```
 
-Enable the A2A-first main-agent routes:
+`serve` is A2A-first by default. Disable A2A only when you explicitly need management APIs without the public A2A surface:
 
 ```bash
-vermay-agent serve --enable-a2a
+vermay-agent serve --disable-a2a
 ```
 
 Health check:
