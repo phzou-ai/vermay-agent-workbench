@@ -52,24 +52,34 @@ def make_client(tmp_path):
     return client, agent_store, service, core
 
 
-def test_main_agent_context_api_lists_messages_and_deletes_context(tmp_path):
-    client, agent_store, service, _core = make_client(tmp_path)
-    sent = client.post(
-        "/message:send",
+def send_rpc_message(client: TestClient, *, request_id: str, message_id: str, text: str, execution_mode: str):
+    return client.post(
+        "/rpc",
         json={
             "jsonrpc": "2.0",
-            "id": "req-1",
-            "method": "message/send",
+            "id": request_id,
+            "method": "SendMessage",
             "params": {
                 "message": {
                     "kind": "message",
                     "role": "user",
-                    "messageId": "msg-user-1",
-                    "parts": [{"kind": "text", "text": "hello"}],
+                    "messageId": message_id,
+                    "parts": [{"kind": "text", "text": text}],
                 },
-                "metadata": {"executionMode": "message"},
+                "metadata": {"executionMode": execution_mode},
             },
         },
+    )
+
+
+def test_main_agent_context_api_lists_messages_and_deletes_context(tmp_path):
+    client, agent_store, service, _core = make_client(tmp_path)
+    sent = send_rpc_message(
+        client,
+        request_id="req-1",
+        message_id="msg-user-1",
+        text="hello",
+        execution_mode="message",
     )
     context_id = sent.json()["result"]["contextId"]
 
@@ -96,22 +106,12 @@ def test_main_agent_context_api_lists_messages_and_deletes_context(tmp_path):
 
 def test_main_agent_context_api_lists_tasks(tmp_path):
     client, agent_store, service, _core = make_client(tmp_path)
-    sent = client.post(
-        "/message:send",
-        json={
-            "jsonrpc": "2.0",
-            "id": "req-task-1",
-            "method": "message/send",
-            "params": {
-                "message": {
-                    "kind": "message",
-                    "role": "user",
-                    "messageId": "msg-task-user-1",
-                    "parts": [{"kind": "text", "text": "run task"}],
-                },
-                "metadata": {"executionMode": "task"},
-            },
-        },
+    sent = send_rpc_message(
+        client,
+        request_id="req-task-1",
+        message_id="msg-task-user-1",
+        text="run task",
+        execution_mode="task",
     )
     context_id = sent.json()["result"]["contextId"]
     task_id = sent.json()["result"]["id"]
