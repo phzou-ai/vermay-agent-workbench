@@ -17,6 +17,8 @@ from vermay_agent.main_agent import (
     DirectA2ARemoteAgentClient,
     DirectLangGraphLocalTaskRunner,
     DirectModelLocalMessageResponder,
+    DirectModelRouterModelClient,
+    DefaultMainAgentRouter,
     MainAgentCore,
     MainAgentStore,
     build_dev_mock_runtime,
@@ -81,11 +83,25 @@ def create_app(
                 active_model = resolve_model_selection(config_path=DEFAULT_MODEL_CONFIG_PATH)
                 local_message_responder = DirectModelLocalMessageResponder(build_model_client(active_model))
                 owned_task_runner = DirectLangGraphLocalTaskRunner(build_runtime(default_config))
+            router = None
+            router_model_name = _router_model_name()
+            if router_model_name and not use_dev_mock_main_agent:
+                router_model_config = resolve_model_selection(
+                    config_path=DEFAULT_MODEL_CONFIG_PATH,
+                    model_name=router_model_name,
+                )
+                router = DefaultMainAgentRouter(
+                    router_model=DirectModelRouterModelClient(
+                        build_model_client(router_model_config),
+                        model_name=router_model_name,
+                    )
+                )
             main_agent_core = MainAgentCore(
                 store=MainAgentStore(owned_store),
                 local_message_responder=local_message_responder,
                 local_task_runner=owned_task_runner,
                 remote_agent_client=DirectA2ARemoteAgentClient(),
+                router=router,
             )
 
     @asynccontextmanager
@@ -255,6 +271,14 @@ def _dev_mock_main_agent_enabled(value: bool | None) -> bool:
     if value is not None:
         return value
     return _truthy_env(os.environ.get("VERMAY_AGENT_DEV_MOCK_MAIN_AGENT"))
+
+
+def _router_model_name() -> str | None:
+    value = os.environ.get("VERMAY_AGENT_ROUTER_MODEL")
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
 
 
 def _truthy_env(value: str | None) -> bool:

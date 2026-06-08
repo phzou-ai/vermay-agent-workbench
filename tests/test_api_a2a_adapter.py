@@ -15,6 +15,7 @@ from vermay_agent.main_agent import (
     MessageRecord,
     RemoteAgentSendResult,
     RemoteAgentTaskSnapshot,
+    RouteDecisionKind,
 )
 from vermay_agent.main_agent.models import TaskStatus as MainAgentTaskStatus
 from vermay_agent.storage import AgentStore
@@ -1327,6 +1328,51 @@ def test_a2a_rpc_send_streaming_message_emits_local_message_result(tmp_path):
     assert '"id": "rpc-stream-message"' in response.text
     assert '"kind": "message"' in response.text
     assert "direct answer" in response.text
+    service.close()
+    agent_store.close()
+
+
+def test_a2a_rpc_send_streaming_auto_falls_back_to_local_message(tmp_path):
+    agent_store = AgentStore(tmp_path / "agent.sqlite")
+    main_store = MainAgentStore(agent_store)
+    core = MainAgentCore(
+        store=main_store,
+        local_message_responder=FakeLocalMessageResponder(),
+        local_task_runner=FakeLocalTaskRunner(),
+    )
+    service = AgentService(
+        session_store=SessionStore(agent_store),
+        runtime_builder=lambda config: FakeRuntime([completed("unused")]),
+    )
+    client = TestClient(create_app(service=service, enable_a2a=True, main_agent_core=core))
+
+    response = client.post(
+        "/rpc",
+        json={
+            "jsonrpc": "2.0",
+            "id": "rpc-stream-auto-message",
+            "method": "SendStreamingMessage",
+            "params": {
+                "message": {
+                    "kind": "message",
+                    "role": "user",
+                    "messageId": "msg-user-1",
+                    "parts": [{"kind": "text", "text": "tell me a joke"}],
+                },
+                "metadata": {"executionMode": "auto"},
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert "event: message" in response.text
+    assert '"kind": "message"' in response.text
+    assert "event: task" not in response.text
+    decisions = main_store.list_context_route_decisions(
+        main_store.list_contexts()[0].context_id
+    )
+    assert decisions[0].kind == RouteDecisionKind.LOCAL_MESSAGE
+    assert decisions[0].metadata == {"source": "fallback", "executionMode": "auto"}
     service.close()
     agent_store.close()
 

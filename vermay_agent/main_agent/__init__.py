@@ -29,7 +29,14 @@ from .remote_agent import (
     RemoteAgentTaskSnapshot,
     fetch_agent_card,
 )
-from .router import DefaultMainAgentRouter, MainAgentRouteDecision, MainAgentRouter
+from .router import (
+    DefaultMainAgentRouter,
+    DirectModelRouterModelClient,
+    MainAgentRouteDecision,
+    MainAgentRouter,
+    RouterModelClient,
+    RouterModelDecision,
+)
 from .store import MainAgentStore
 from .task_runner import DirectLangGraphLocalTaskRunner, LocalTaskRunner, LocalTaskRunResult
 
@@ -44,6 +51,7 @@ __all__ = [
     "DevMockLocalTaskRunner",
     "DevMockRuntime",
     "DirectModelLocalMessageResponder",
+    "DirectModelRouterModelClient",
     "DirectLangGraphLocalTaskRunner",
     "LocalMessageResult",
     "LocalTaskResult",
@@ -65,6 +73,8 @@ __all__ = [
     "RemoteAgentTaskSnapshot",
     "RouteDecisionKind",
     "RouteDecisionRecord",
+    "RouterModelClient",
+    "RouterModelDecision",
     "TaskEventRecord",
     "TaskRecord",
     "TaskStatus",

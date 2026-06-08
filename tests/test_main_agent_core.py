@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from langchain_core.messages import AIMessage
+
 from vermay_agent.main_agent import (
+    DefaultMainAgentRouter,
+    DirectModelRouterModelClient,
     LocalMessageResult,
     LocalTaskResult,
     LocalTaskRunResult,
@@ -14,8 +18,10 @@ from vermay_agent.main_agent import (
     RemoteAgentResult,
     RemoteAgentSendResult,
     RouteDecisionKind,
+    RouterModelDecision,
     TaskStatus,
 )
+from vermay_agent.langgraph_runtime.model_adapters import ModelInvocation
 from vermay_agent.storage import AgentStore
 
 
@@ -38,6 +44,26 @@ class FakeTaskRunner:
             status=TaskStatus.COMPLETED,
             parts=[{"kind": "text", "text": "task answer"}],
         )
+
+
+@dataclass
+class FakeRouterModel:
+    decisions: list[RouterModelDecision]
+    calls: list[list[MessageRecord]] = field(default_factory=list)
+
+    def classify(self, *, request, messages, registered_agents):
+        self.calls.append(messages)
+        return self.decisions.pop(0)
+
+
+@dataclass
+class FakeLangGraphModelClient:
+    contents: list[str]
+    calls: list[list] = field(default_factory=list)
+
+    def invoke(self, messages: list, tools: list) -> ModelInvocation:
+        self.calls.append(messages)
+        return ModelInvocation(message=AIMessage(content=self.contents.pop(0)))
 
 
 @dataclass
@@ -492,7 +518,12 @@ def test_main_agent_core_auto_routes_to_registered_agent_by_keyword(tmp_path):
     decision = store.get_route_decision(result.route_decision_id)
     assert decision.kind == RouteDecisionKind.REMOTE_AGENT
     assert decision.reason == "auto route matched registered agent keyword: kubernetes"
-    assert decision.metadata == {"source": "keyword_match", "keyword": "kubernetes"}
+    assert decision.metadata == {
+        "source": "guardrail",
+        "executionMode": "auto",
+        "keyword": "kubernetes",
+        "legacySource": "keyword_match",
+    }
 
 
 def test_main_agent_core_auto_routes_to_registered_agent_by_skill_tag(tmp_path):
@@ -532,7 +563,219 @@ def test_main_agent_core_auto_routes_to_registered_agent_by_skill_tag(tmp_path):
     assert isinstance(result, RemoteAgentResult)
     assert result.target_agent_id == "agent-sql"
     decision = store.get_route_decision(result.route_decision_id)
-    assert decision.metadata == {"source": "keyword_match", "keyword": "sqlite"}
+    assert decision.metadata == {
+        "source": "guardrail",
+        "executionMode": "auto",
+        "keyword": "sqlite",
+        "legacySource": "keyword_match",
+    }
+
+
+def test_main_agent_core_auto_fallback_routes_to_local_message_without_task(tmp_path):
+    store = MainAgentStore(AgentStore(tmp_path / "agent.sqlite"))
+    responder = FakeResponder()
+    runner = FakeTaskRunner()
+    core = MainAgentCore(
+        store=store,
+        local_message_responder=responder,
+        local_task_runner=runner,
+    )
+
+    result = core.handle_message(
+        MainAgentRequest(
+            context_id=None,
+            message_id="msg-user-1",
+            role=MessageRole.USER,
+            parts=[{"kind": "text", "text": "tell me a joke"}],
+            metadata={"executionMode": "auto"},
+        )
+    )
+
+    assert isinstance(result, LocalMessageResult)
+    assert result.parts == [{"kind": "text", "text": "model answer"}]
+    assert store.list_context_tasks(result.context_id) == []
+    assert runner.calls == []
+    assert len(responder.calls) == 1
+    decision = store.get_route_decision(result.route_decision_id)
+    assert decision.kind == RouteDecisionKind.LOCAL_MESSAGE
+    assert decision.reason == "auto fallback to local message"
+    assert decision.metadata == {"source": "fallback", "executionMode": "auto"}
+
+
+def test_main_agent_core_auto_hard_signal_continues_active_task(tmp_path):
+    store = MainAgentStore(AgentStore(tmp_path / "agent.sqlite"))
+    runner = FakeTaskRunner()
+    core = MainAgentCore(
+        store=store,
+        local_message_responder=FakeResponder(),
+        local_task_runner=runner,
+    )
+    context = store.create_context(context_id="ctx-1")
+    store.append_message(
+        message_id="msg-original",
+        context_id=context.context_id,
+        role=MessageRole.USER,
+        parts=[{"kind": "text", "text": "check k8s status"}],
+    )
+    active_task = store.create_task(
+        task_id="task-active",
+        context_id=context.context_id,
+        input_message_id="msg-original",
+        runtime_thread_id="thread-active",
+        status=TaskStatus.RUNNING,
+    )
+
+    result = core.handle_message(
+        MainAgentRequest(
+            context_id=context.context_id,
+            message_id="msg-user-2",
+            role=MessageRole.USER,
+            parts=[{"kind": "text", "text": "continue"}],
+            metadata={"executionMode": "auto", "taskId": active_task.task_id},
+        )
+    )
+
+    assert isinstance(result, LocalTaskResult)
+    decision = store.get_route_decision(result.route_decision_id)
+    assert decision.kind == RouteDecisionKind.LOCAL_TASK
+    assert decision.confidence == 1.0
+    assert decision.metadata == {
+        "source": "hard_signal",
+        "executionMode": "auto",
+        "taskId": "task-active",
+        "signal": "active_task",
+    }
+
+
+def test_main_agent_core_auto_uses_router_model_for_local_task(tmp_path):
+    store = MainAgentStore(AgentStore(tmp_path / "agent.sqlite"))
+    runner = FakeTaskRunner()
+    router_model = FakeRouterModel(
+        decisions=[
+            RouterModelDecision(
+                kind=RouteDecisionKind.LOCAL_TASK,
+                reason="Needs Kubernetes inspection through tools.",
+                confidence=0.91,
+                metadata={"modelReason": "Needs Kubernetes inspection through tools."},
+            )
+        ]
+    )
+    core = MainAgentCore(
+        store=store,
+        local_message_responder=FakeResponder(),
+        local_task_runner=runner,
+        router=DefaultMainAgentRouter(router_model=router_model),
+    )
+
+    result = core.handle_message(
+        MainAgentRequest(
+            context_id=None,
+            message_id="msg-user-1",
+            role=MessageRole.USER,
+            parts=[{"kind": "text", "text": "检查 k8s 状态"}],
+            metadata={"executionMode": "auto"},
+        )
+    )
+
+    assert isinstance(result, LocalTaskResult)
+    assert len(runner.calls) == 1
+    decision = store.get_route_decision(result.route_decision_id)
+    assert decision.kind == RouteDecisionKind.LOCAL_TASK
+    assert decision.confidence == 0.91
+    assert decision.metadata == {
+        "source": "model",
+        "executionMode": "auto",
+        "modelReason": "Needs Kubernetes inspection through tools.",
+    }
+
+
+def test_main_agent_core_auto_router_model_low_confidence_falls_back_to_message(tmp_path):
+    store = MainAgentStore(AgentStore(tmp_path / "agent.sqlite"))
+    router_model = FakeRouterModel(
+        decisions=[
+            RouterModelDecision(
+                kind=RouteDecisionKind.LOCAL_TASK,
+                reason="Possibly needs tools.",
+                confidence=0.4,
+                metadata={
+                    "source": "fallback",
+                    "fallbackReason": "low_confidence",
+                    "modelRoute": "local_task",
+                    "modelReason": "Possibly needs tools.",
+                    "confidenceThreshold": 0.65,
+                },
+            )
+        ]
+    )
+    core = MainAgentCore(
+        store=store,
+        local_message_responder=FakeResponder(),
+        local_task_runner=FakeTaskRunner(),
+        router=DefaultMainAgentRouter(router_model=router_model),
+    )
+
+    result = core.handle_message(
+        MainAgentRequest(
+            context_id=None,
+            message_id="msg-user-1",
+            role=MessageRole.USER,
+            parts=[{"kind": "text", "text": "maybe check something"}],
+            metadata={"executionMode": "auto"},
+        )
+    )
+
+    assert isinstance(result, LocalMessageResult)
+    decision = store.get_route_decision(result.route_decision_id)
+    assert decision.kind == RouteDecisionKind.LOCAL_MESSAGE
+    assert decision.metadata["source"] == "fallback"
+    assert decision.metadata["fallbackReason"] == "low_confidence"
+
+
+def test_direct_model_router_model_parses_json_and_validates_remote_agent(tmp_path):
+    store = MainAgentStore(AgentStore(tmp_path / "agent.sqlite"))
+    store.upsert_registered_agent(
+        agent_id="agent-k8s",
+        name="Kubernetes agent",
+        card_url="http://127.0.0.1:9001/.well-known/agent-card.json",
+    )
+    model = FakeLangGraphModelClient(
+        contents=[
+            '{"route":"remote_agent","confidence":0.88,"reason":"Kubernetes specialist owns this.","targetAgentId":"agent-k8s"}'
+        ]
+    )
+    router_model = DirectModelRouterModelClient(model, model_name="router-small")
+    request = MainAgentRequest(
+        context_id=None,
+        message_id="msg-user-1",
+        role=MessageRole.USER,
+        parts=[{"kind": "text", "text": "check k8s"}],
+        metadata={"executionMode": "auto"},
+    )
+
+    decision = router_model.classify(
+        request=request,
+        messages=[
+            MessageRecord(
+                message_id="msg-user-1",
+                context_id="ctx-1",
+                role=MessageRole.USER,
+                parts=request.parts,
+                task_id=None,
+                metadata={},
+                created_at="2026-06-08T00:00:00Z",
+            )
+        ],
+        registered_agents=store.list_registered_agents(enabled_only=True),
+    )
+
+    assert decision.kind == RouteDecisionKind.REMOTE_AGENT
+    assert decision.target_agent_id == "agent-k8s"
+    assert decision.confidence == 0.88
+    assert decision.metadata == {
+        "source": "model",
+        "model": "router-small",
+        "modelReason": "Kubernetes specialist owns this.",
+    }
 
 
 def test_main_agent_core_remote_route_requires_registered_enabled_agent_and_client(tmp_path):
