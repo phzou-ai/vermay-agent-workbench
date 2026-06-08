@@ -73,6 +73,7 @@ PY
 }
 
 echo "A2A smoke: backend=$BASE_URL"
+echo "Checking path-style compatibility routes"
 
 message_response="$(
   post_json "$BASE_URL/message:send" "$(
@@ -103,6 +104,8 @@ if [[ "$get_task_id" != "$task_id" ]]; then
   echo "task get mismatch: expected=$task_id got=$get_task_id" >&2
   exit 1
 fi
+
+echo "Checking canonical /rpc routes"
 
 rpc_message_response="$(
   post_json "$BASE_URL/rpc" "$(
