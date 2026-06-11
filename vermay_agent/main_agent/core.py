@@ -93,14 +93,15 @@ class MainAgentCore:
         if self.local_task_runner is None:
             raise ValueError("local task runner is not configured")
 
-        self.store.append_task_event(
-            task_id=task_id,
-            type="task_resumed",
-            status=task.status,
-            payload={"approved": approved, **({"reason": reason} if reason else {})},
-        )
-        task = self.store.update_task_status(task_id, TaskStatus.RUNNING)
-        self.store.append_task_event(task_id=task_id, type="task_started", status=TaskStatus.RUNNING)
+        with self.store.transaction():
+            self.store.append_task_event(
+                task_id=task_id,
+                type="task_resumed",
+                status=task.status,
+                payload={"approved": approved, **({"reason": reason} if reason else {})},
+            )
+            task = self.store.update_task_status(task_id, TaskStatus.RUNNING)
+            self.store.append_task_event(task_id=task_id, type="task_started", status=TaskStatus.RUNNING)
         try:
             result = self.local_task_runner.resume(
                 thread_id=task.runtime_thread_id,
@@ -164,14 +165,15 @@ class MainAgentCore:
             confidence=route_decision.confidence,
             metadata=route_decision.metadata,
         )
-        task = self.store.create_task(
-            task_id=_new_id("task"),
-            context_id=context_id,
-            input_message_id=input_message_id,
-            runtime_thread_id=_new_id("thread"),
-            status=TaskStatus.CREATED,
-        )
-        self.store.append_task_event(task_id=task.task_id, type="task_created", status=TaskStatus.CREATED)
+        with self.store.transaction():
+            task = self.store.create_task(
+                task_id=_new_id("task"),
+                context_id=context_id,
+                input_message_id=input_message_id,
+                runtime_thread_id=_new_id("thread"),
+                status=TaskStatus.CREATED,
+            )
+            self.store.append_task_event(task_id=task.task_id, type="task_created", status=TaskStatus.CREATED)
         if self.local_task_runner is not None:
             task = self._run_local_task(task.task_id, context_id=context_id, route_decision_id=decision.decision_id)
         return LocalTaskResult(
@@ -183,8 +185,9 @@ class MainAgentCore:
         )
 
     def _run_local_task(self, task_id: str, *, context_id: str, route_decision_id: str):
-        task = self.store.update_task_status(task_id, TaskStatus.RUNNING)
-        self.store.append_task_event(task_id=task_id, type="task_started", status=TaskStatus.RUNNING)
+        with self.store.transaction():
+            task = self.store.update_task_status(task_id, TaskStatus.RUNNING)
+            self.store.append_task_event(task_id=task_id, type="task_started", status=TaskStatus.RUNNING)
         try:
             result = self.local_task_runner.run(
                 recent_messages(self.store, context_id, limit=10),
@@ -204,34 +207,35 @@ class MainAgentCore:
         if task is None:
             raise ValueError(f"unknown task: {task_id}")
         if result.status == TaskStatus.COMPLETED:
-            assistant_message = self.store.append_message(
-                message_id=_new_id("msg"),
-                context_id=task.context_id,
-                role=MessageRole.AGENT,
-                parts=result.parts,
-                task_id=task_id,
-                metadata={
-                    **(metadata or {}),
-                    "routeKind": RouteDecisionKind.LOCAL_TASK.value,
-                },
-            )
-            artifact_parts = result.artifact_parts or result.parts
-            artifact = self.store.upsert_artifact(
-                artifact_id=f"{task_id}:final_answer",
-                task_id=task_id,
-                context_id=task.context_id,
-                parts=artifact_parts,
-                metadata={"kind": "final_answer", "outputMessageId": assistant_message.message_id},
-            )
-            self.store.append_task_event(
-                task_id=task_id,
-                type="task_artifact_created",
-                status=TaskStatus.COMPLETED,
-                payload={"artifact_id": artifact.artifact_id, "kind": "final_answer"},
-            )
-            task = self.store.set_task_output_message(task_id, assistant_message.message_id)
-            task = self.store.update_task_status(task_id, TaskStatus.COMPLETED)
-            self.store.append_task_event(task_id=task_id, type="task_completed", status=TaskStatus.COMPLETED)
+            with self.store.transaction():
+                assistant_message = self.store.append_message(
+                    message_id=_new_id("msg"),
+                    context_id=task.context_id,
+                    role=MessageRole.AGENT,
+                    parts=result.parts,
+                    task_id=task_id,
+                    metadata={
+                        **(metadata or {}),
+                        "routeKind": RouteDecisionKind.LOCAL_TASK.value,
+                    },
+                )
+                artifact_parts = result.artifact_parts or result.parts
+                artifact = self.store.upsert_artifact(
+                    artifact_id=f"{task_id}:final_answer",
+                    task_id=task_id,
+                    context_id=task.context_id,
+                    parts=artifact_parts,
+                    metadata={"kind": "final_answer", "outputMessageId": assistant_message.message_id},
+                )
+                self.store.append_task_event(
+                    task_id=task_id,
+                    type="task_artifact_created",
+                    status=TaskStatus.COMPLETED,
+                    payload={"artifact_id": artifact.artifact_id, "kind": "final_answer"},
+                )
+                task = self.store.set_task_output_message(task_id, assistant_message.message_id)
+                task = self.store.update_task_status(task_id, TaskStatus.COMPLETED)
+                self.store.append_task_event(task_id=task_id, type="task_completed", status=TaskStatus.COMPLETED)
             return task
 
         if result.status in {
@@ -244,42 +248,45 @@ class MainAgentCore:
         }:
             if result.status == TaskStatus.RUNNING:
                 return task
-            active = self.store.update_task_status(task_id, result.status)
-            self.store.append_task_event(
-                task_id=task_id,
-                type=_task_event_type_for_status(result.status),
-                status=result.status,
-                payload=_task_result_error_payload(result),
-            )
+            with self.store.transaction():
+                active = self.store.update_task_status(task_id, result.status)
+                self.store.append_task_event(
+                    task_id=task_id,
+                    type=_task_event_type_for_status(result.status),
+                    status=result.status,
+                    payload=_task_result_error_payload(result),
+                )
             return active
 
-        failed = self.store.update_task_status(
-            task_id,
-            TaskStatus.FAILED,
-            error_code=result.error_code or "task_not_completed",
-            error_message=result.error_message or f"local task ended with unsupported status: {result.status.value}",
-        )
-        self.store.append_task_event(
-            task_id=task_id,
-            type="task_failed",
-            status=TaskStatus.FAILED,
-            payload={"error_code": failed.error_code, "error_message": failed.error_message},
-        )
+        with self.store.transaction():
+            failed = self.store.update_task_status(
+                task_id,
+                TaskStatus.FAILED,
+                error_code=result.error_code or "task_not_completed",
+                error_message=result.error_message or f"local task ended with unsupported status: {result.status.value}",
+            )
+            self.store.append_task_event(
+                task_id=task_id,
+                type="task_failed",
+                status=TaskStatus.FAILED,
+                payload={"error_code": failed.error_code, "error_message": failed.error_message},
+            )
         return failed
 
     def _mark_local_task_failed(self, task_id: str, exc: Exception):
-        failed = self.store.update_task_status(
-            task_id,
-            TaskStatus.FAILED,
-            error_code=exc.__class__.__name__,
-            error_message=str(exc),
-        )
-        self.store.append_task_event(
-            task_id=task_id,
-            type="task_failed",
-            status=TaskStatus.FAILED,
-            payload={"error_code": failed.error_code, "error_message": failed.error_message},
-        )
+        with self.store.transaction():
+            failed = self.store.update_task_status(
+                task_id,
+                TaskStatus.FAILED,
+                error_code=exc.__class__.__name__,
+                error_message=str(exc),
+            )
+            self.store.append_task_event(
+                task_id=task_id,
+                type="task_failed",
+                status=TaskStatus.FAILED,
+                payload={"error_code": failed.error_code, "error_message": failed.error_message},
+            )
         return failed
 
     def _handle_remote_agent(
@@ -320,32 +327,33 @@ class MainAgentCore:
         delegation_id = _new_id("delegate")
 
         if remote.kind == "message":
-            assistant_message = self.store.append_message(
-                message_id=_new_id("msg"),
-                context_id=context_id,
-                role=MessageRole.AGENT,
-                parts=remote.parts,
-                metadata={
-                    "inputMessageId": input_message_id,
-                    "routeDecisionId": decision.decision_id,
-                    "routeKind": RouteDecisionKind.REMOTE_AGENT.value,
-                    "remoteAgentId": target_agent_id,
-                    "remoteContextId": remote.context_id,
-                    "remoteMessageId": remote.message_id,
-                },
-            )
-            self.store.create_delegated_task(
-                delegation_id=delegation_id,
-                context_id=context_id,
-                input_message_id=input_message_id,
-                route_decision_id=decision.decision_id,
-                remote_agent_id=target_agent_id,
-                remote_context_id=remote.context_id,
-                remote_message_id=remote.message_id,
-                result_kind="message",
-                status="completed",
-                metadata={"localMessageId": assistant_message.message_id},
-            )
+            with self.store.transaction():
+                assistant_message = self.store.append_message(
+                    message_id=_new_id("msg"),
+                    context_id=context_id,
+                    role=MessageRole.AGENT,
+                    parts=remote.parts,
+                    metadata={
+                        "inputMessageId": input_message_id,
+                        "routeDecisionId": decision.decision_id,
+                        "routeKind": RouteDecisionKind.REMOTE_AGENT.value,
+                        "remoteAgentId": target_agent_id,
+                        "remoteContextId": remote.context_id,
+                        "remoteMessageId": remote.message_id,
+                    },
+                )
+                self.store.create_delegated_task(
+                    delegation_id=delegation_id,
+                    context_id=context_id,
+                    input_message_id=input_message_id,
+                    route_decision_id=decision.decision_id,
+                    remote_agent_id=target_agent_id,
+                    remote_context_id=remote.context_id,
+                    remote_message_id=remote.message_id,
+                    result_kind="message",
+                    status="completed",
+                    metadata={"localMessageId": assistant_message.message_id},
+                )
             return RemoteAgentResult(
                 kind=RouteDecisionKind.REMOTE_AGENT,
                 context_id=context_id,
@@ -358,36 +366,37 @@ class MainAgentCore:
             )
 
         if remote.kind == "task":
-            task = self.store.create_task(
-                task_id=_new_id("task"),
-                context_id=context_id,
-                input_message_id=input_message_id,
-                runtime_thread_id=_new_id("remote-thread"),
-                assigned_agent_id=target_agent_id,
-                status=_remote_task_status(remote.status),
-            )
-            self.store.append_task_event(
-                task_id=task.task_id,
-                type="task_delegated",
-                status=task.status,
-                payload={
-                    "remote_agent_id": target_agent_id,
-                    "remote_task_id": remote.task_id,
-                    "remote_context_id": remote.context_id,
-                },
-            )
-            self.store.create_delegated_task(
-                delegation_id=delegation_id,
-                context_id=context_id,
-                input_message_id=input_message_id,
-                route_decision_id=decision.decision_id,
-                remote_agent_id=target_agent_id,
-                local_task_id=task.task_id,
-                remote_task_id=remote.task_id,
-                remote_context_id=remote.context_id,
-                result_kind="task",
-                status=remote.status or task.status.value,
-            )
+            with self.store.transaction():
+                task = self.store.create_task(
+                    task_id=_new_id("task"),
+                    context_id=context_id,
+                    input_message_id=input_message_id,
+                    runtime_thread_id=_new_id("remote-thread"),
+                    assigned_agent_id=target_agent_id,
+                    status=_remote_task_status(remote.status),
+                )
+                self.store.append_task_event(
+                    task_id=task.task_id,
+                    type="task_delegated",
+                    status=task.status,
+                    payload={
+                        "remote_agent_id": target_agent_id,
+                        "remote_task_id": remote.task_id,
+                        "remote_context_id": remote.context_id,
+                    },
+                )
+                self.store.create_delegated_task(
+                    delegation_id=delegation_id,
+                    context_id=context_id,
+                    input_message_id=input_message_id,
+                    route_decision_id=decision.decision_id,
+                    remote_agent_id=target_agent_id,
+                    local_task_id=task.task_id,
+                    remote_task_id=remote.task_id,
+                    remote_context_id=remote.context_id,
+                    result_kind="task",
+                    status=remote.status or task.status.value,
+                )
             return RemoteAgentResult(
                 kind=RouteDecisionKind.REMOTE_AGENT,
                 context_id=context_id,

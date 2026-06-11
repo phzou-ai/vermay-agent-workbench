@@ -136,7 +136,8 @@ def test_a2a_subscribe_route_streams_projected_status_and_artifact_events(tmp_pa
     assert "event: artifact-update" in body
     assert "TASK_STATE_COMPLETED" in body
     assert "final_answer" in body
-    assert "thread" not in body.lower()
+    assert "thread_id" not in body.lower()
+    assert "localThreadId" in body
 
 
 def test_a2a_send_message_creates_context_session_task_and_projected_artifact(tmp_path):
@@ -162,7 +163,8 @@ def test_a2a_send_message_creates_context_session_task_and_projected_artifact(tm
     assert payload["status"]["state"] == "TASK_STATE_COMPLETED"
     assert payload["artifacts"][0]["artifactId"] == "final_answer"
     assert payload["artifacts"][0]["parts"] == [{"text": "weather done", "mediaType": "text/plain"}]
-    assert "thread" not in str(payload).lower()
+    assert "thread_id" not in str(payload).lower()
+    assert payload["metadata"]["localThreadId"] == "task:task-1:attempt:1"
     assert runtime.started[0] == ("weather forecast for Beijing", "task:task-1:attempt:1")
     session = service.get_session_by_context_id("ctx-1")
     assert session is not None
@@ -246,7 +248,8 @@ def test_a2a_adapter_projects_status_and_artifact_events_without_internal_payloa
     ]
     assert projections[-1]["status"]["state"] == "TASK_STATE_COMPLETED"
     assert projections[2]["artifact"]["artifactId"] == "final_answer"
-    assert "thread" not in str(projections).lower()
+    assert "thread_id" not in str(projections).lower()
+    assert projections[0]["metadata"]["localThreadId"] == "task:task-1:attempt:1"
     service.close()
     store.close()
 

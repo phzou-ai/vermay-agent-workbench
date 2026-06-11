@@ -7,10 +7,21 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from vermay_agent.errors import AgentErrorCode, error_info_from_exception
+from vermay_agent.errors import error_info_from_exception
 
 from .adapter import A2AAdapter
 from .projection import is_terminal_a2a_state
+from .rpc import (
+    is_jsonrpc_request as _is_jsonrpc_request,
+    jsonrpc_error_payload as _jsonrpc_error_payload,
+    jsonrpc_error_response as _jsonrpc_error_response,
+    jsonrpc_protocol_error_response as _jsonrpc_protocol_error_response,
+    jsonrpc_success_payload as _jsonrpc_success_payload,
+    parse_rpc_request as _parse_rpc_request,
+    rpc_after_event_id as _rpc_after_event_id,
+    rpc_params as _rpc_params,
+    rpc_task_id as _rpc_task_id,
+)
 
 
 def create_a2a_router(adapter: A2AAdapter) -> APIRouter:
@@ -28,61 +39,7 @@ def create_a2a_router(adapter: A2AAdapter) -> APIRouter:
             return rpc_request.error
         payload = rpc_request.payload
         assert payload is not None
-        request_id = payload.get("id")
-        method = payload.get("method")
-        try:
-            if method in {"SendMessage", "message/send"}:
-                return adapter.send_message_payload({**payload, "method": "message/send"})
-            if method in {"GetTask", "tasks/get"}:
-                params = _rpc_params(payload)
-                task_id = _rpc_task_id(params)
-                return _jsonrpc_success_payload(request_id, adapter.get_task(task_id))
-            if method in {"CancelTask", "tasks/cancel"}:
-                params = _rpc_params(payload)
-                task_id = _rpc_task_id(params)
-                reason = params.get("reason")
-                if reason is not None and not isinstance(reason, str):
-                    return _jsonrpc_protocol_error_response(
-                        request_id,
-                        code=-32602,
-                        message="JSON-RPC params.reason must be a string.",
-                    )
-                return _jsonrpc_success_payload(request_id, adapter.cancel_task(task_id, reason=reason))
-            if method in {"ResumeTask", "tasks/resume"}:
-                params = _rpc_params(payload)
-                task_id = _rpc_task_id(params)
-                approved = params.get("approved")
-                if not isinstance(approved, bool):
-                    return _jsonrpc_protocol_error_response(
-                        request_id,
-                        code=-32602,
-                        message="JSON-RPC params.approved must be a boolean.",
-                    )
-                reason = params.get("reason")
-                if reason is not None and not isinstance(reason, str):
-                    return _jsonrpc_protocol_error_response(
-                        request_id,
-                        code=-32602,
-                        message="JSON-RPC params.reason must be a string.",
-                    )
-                return _jsonrpc_success_payload(
-                    request_id,
-                    adapter.resume_task(task_id, approved=approved, reason=reason),
-                )
-            if method in {"SendStreamingMessage", "message/stream"}:
-                return _a2a_sse_response(_rpc_stream_message_events(adapter, payload))
-            if method in {"SubscribeToTask", "tasks/subscribe"}:
-                return _a2a_sse_response(_rpc_subscribe_task_events(adapter, payload, request))
-            return _jsonrpc_protocol_error_response(
-                request_id,
-                code=-32601,
-                message="JSON-RPC method not found.",
-                local_code="method_not_found",
-            )
-        except ValueError as exc:
-            return _jsonrpc_protocol_error_response(request_id, code=-32602, message=str(exc))
-        except Exception as exc:
-            return _jsonrpc_error_response(request_id, exc)
+        return _dispatch_rpc_request(adapter=adapter, payload=payload, request=request)
 
     @router.post("/message:send", response_model=None)
     def send_message(request: dict[str, Any]) -> dict[str, Any] | JSONResponse:
@@ -243,6 +200,69 @@ def create_a2a_router(adapter: A2AAdapter) -> APIRouter:
     return router
 
 
+def _dispatch_rpc_request(
+    *,
+    adapter: A2AAdapter,
+    payload: dict[str, Any],
+    request: Request,
+) -> dict[str, Any] | JSONResponse | StreamingResponse:
+    request_id = payload.get("id")
+    method = payload.get("method")
+    try:
+        if method in {"SendMessage", "message/send"}:
+            return adapter.send_message_payload({**payload, "method": "message/send"})
+        if method in {"GetTask", "tasks/get"}:
+            params = _rpc_params(payload)
+            task_id = _rpc_task_id(params)
+            return _jsonrpc_success_payload(request_id, adapter.get_task(task_id))
+        if method in {"CancelTask", "tasks/cancel"}:
+            params = _rpc_params(payload)
+            task_id = _rpc_task_id(params)
+            reason = params.get("reason")
+            if reason is not None and not isinstance(reason, str):
+                return _jsonrpc_protocol_error_response(
+                    request_id,
+                    code=-32602,
+                    message="JSON-RPC params.reason must be a string.",
+                )
+            return _jsonrpc_success_payload(request_id, adapter.cancel_task(task_id, reason=reason))
+        if method in {"ResumeTask", "tasks/resume"}:
+            params = _rpc_params(payload)
+            task_id = _rpc_task_id(params)
+            approved = params.get("approved")
+            if not isinstance(approved, bool):
+                return _jsonrpc_protocol_error_response(
+                    request_id,
+                    code=-32602,
+                    message="JSON-RPC params.approved must be a boolean.",
+                )
+            reason = params.get("reason")
+            if reason is not None and not isinstance(reason, str):
+                return _jsonrpc_protocol_error_response(
+                    request_id,
+                    code=-32602,
+                    message="JSON-RPC params.reason must be a string.",
+                )
+            return _jsonrpc_success_payload(
+                request_id,
+                adapter.resume_task(task_id, approved=approved, reason=reason),
+            )
+        if method in {"SendStreamingMessage", "message/stream"}:
+            return _a2a_sse_response(_rpc_stream_message_events(adapter, payload))
+        if method in {"SubscribeToTask", "tasks/subscribe"}:
+            return _a2a_sse_response(_rpc_subscribe_task_events(adapter, payload, request))
+        return _jsonrpc_protocol_error_response(
+            request_id,
+            code=-32601,
+            message="JSON-RPC method not found.",
+            local_code="method_not_found",
+        )
+    except ValueError as exc:
+        return _jsonrpc_protocol_error_response(request_id, code=-32602, message=str(exc))
+    except Exception as exc:
+        return _jsonrpc_error_response(request_id, exc)
+
+
 def _a2a_sse_response(event_stream: Any) -> StreamingResponse:
     return StreamingResponse(
         event_stream,
@@ -357,72 +377,6 @@ class _ResumeRequest:
         self.reason = reason
         self.error = error
         self.jsonrpc = jsonrpc
-
-
-class _RpcRequest:
-    def __init__(self, *, payload: dict[str, Any] | None = None, error: JSONResponse | None = None) -> None:
-        self.payload = payload
-        self.error = error
-
-
-async def _parse_rpc_request(request: Request) -> _RpcRequest:
-    body = await request.body()
-    if not body.strip():
-        return _RpcRequest(
-            error=_jsonrpc_protocol_error_response(
-                None,
-                code=-32600,
-                message="JSON-RPC request body is required.",
-            )
-        )
-    try:
-        payload = json.loads(body)
-    except json.JSONDecodeError:
-        return _RpcRequest(
-            error=_jsonrpc_protocol_error_response(
-                None,
-                code=-32700,
-                message="JSON parse error.",
-                local_code="parse_error",
-            )
-        )
-    if isinstance(payload, list):
-        return _RpcRequest(
-            error=_jsonrpc_protocol_error_response(
-                None,
-                code=-32600,
-                message="JSON-RPC batch requests are not supported yet.",
-                local_code="batch_not_supported",
-            )
-        )
-    if not isinstance(payload, dict):
-        return _RpcRequest(
-            error=_jsonrpc_protocol_error_response(
-                None,
-                code=-32600,
-                message="JSON-RPC request must be an object.",
-            )
-        )
-
-    request_id = payload.get("id")
-    if payload.get("jsonrpc") != "2.0":
-        return _RpcRequest(
-            error=_jsonrpc_protocol_error_response(
-                request_id,
-                code=-32600,
-                message="JSON-RPC request jsonrpc must be '2.0'.",
-            )
-        )
-    method = payload.get("method")
-    if not isinstance(method, str) or not method:
-        return _RpcRequest(
-            error=_jsonrpc_protocol_error_response(
-                request_id,
-                code=-32600,
-                message="JSON-RPC request method must be a string.",
-            )
-        )
-    return _RpcRequest(payload=payload)
 
 
 async def _parse_cancel_request(
@@ -622,108 +576,6 @@ def _a2a_http_exception(exc: Exception) -> HTTPException:
             "message": error.public_message,
         },
     )
-
-
-def _jsonrpc_error_response(request_id: Any, exc: Exception) -> JSONResponse:
-    error_payload = _jsonrpc_error_payload(request_id, exc)
-    error = error_info_from_exception(exc)
-    return JSONResponse(status_code=error.http_status, content=error_payload)
-
-
-def _jsonrpc_success_payload(request_id: Any, payload: dict[str, Any]) -> dict[str, Any]:
-    if payload.get("jsonrpc") == "2.0" and ("result" in payload or "error" in payload):
-        return {**payload, "id": request_id}
-    return {
-        "jsonrpc": "2.0",
-        "id": request_id,
-        "result": payload,
-    }
-
-
-def _jsonrpc_error_payload(request_id: Any, exc: Exception) -> dict[str, Any]:
-    error = error_info_from_exception(exc)
-    return {
-        "jsonrpc": "2.0",
-        "id": request_id,
-        "error": {
-            "code": _jsonrpc_error_code(error.code),
-            "message": error.public_message,
-            "data": _jsonrpc_error_data(error.code.value),
-        },
-    }
-
-
-def _jsonrpc_protocol_error_response(
-    request_id: Any,
-    *,
-    code: int,
-    message: str,
-    local_code: str = "invalid_request",
-) -> JSONResponse:
-    return JSONResponse(
-        status_code=400,
-        content={
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "error": {
-                "code": code,
-                "message": message,
-                "data": _jsonrpc_error_data(local_code),
-            },
-        },
-    )
-
-
-def _jsonrpc_error_data(local_code: str) -> dict[str, Any]:
-    return {
-        "localCode": local_code,
-        "errorInfo": {
-            "reason": local_code,
-            "domain": "vermay-agent",
-            "metadata": {
-                "localCode": local_code,
-            },
-        },
-    }
-
-
-def _rpc_params(payload: dict[str, Any]) -> dict[str, Any]:
-    params = payload.get("params")
-    if params is None:
-        return {}
-    if not isinstance(params, dict):
-        raise ValueError("JSON-RPC params must be an object.")
-    return params
-
-
-def _rpc_task_id(params: dict[str, Any]) -> str:
-    task_id = params.get("id", params.get("taskId"))
-    if not isinstance(task_id, str) or not task_id:
-        raise ValueError("JSON-RPC params.id must be a non-empty string.")
-    return task_id
-
-
-def _rpc_after_event_id(params: dict[str, Any]) -> int:
-    after_event_id = params.get("afterEventId", 0)
-    if not isinstance(after_event_id, int) or after_event_id < 0:
-        raise ValueError("JSON-RPC params.afterEventId must be a non-negative integer.")
-    return after_event_id
-
-
-def _jsonrpc_error_code(code: AgentErrorCode) -> int:
-    if code == AgentErrorCode.INVALID_REQUEST:
-        return -32602
-    if code in {AgentErrorCode.SESSION_NOT_FOUND, AgentErrorCode.TASK_NOT_FOUND, AgentErrorCode.ARTIFACT_NOT_FOUND}:
-        return -32004
-    if code == AgentErrorCode.INVALID_SESSION_STATE:
-        return -32009
-    if code == AgentErrorCode.PERMISSION_ERROR:
-        return -32003
-    return -32000
-
-
-def _is_jsonrpc_request(payload: dict[str, Any]) -> bool:
-    return payload.get("jsonrpc") == "2.0" or payload.get("method") is not None
 
 
 def _format_a2a_sse_event(event: dict[str, Any]) -> str:

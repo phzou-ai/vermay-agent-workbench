@@ -179,6 +179,23 @@ def test_agent_store_migrations_are_idempotent(tmp_path):
     second.close()
 
 
+def test_agent_store_transaction_rolls_back_execute_calls(tmp_path):
+    store = AgentStore(tmp_path / "agent.sqlite")
+
+    with pytest.raises(RuntimeError, match="rollback probe"):
+        with store.transaction():
+            store.execute(
+                """
+                INSERT INTO skill_index(name, path, triggers, updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                ("probe", "/tmp/probe", "[]", "2026-06-11T00:00:00+00:00"),
+            )
+            raise RuntimeError("rollback probe")
+
+    assert store.query("SELECT name FROM skill_index WHERE name=?", ("probe",)) == []
+
+
 def test_agent_store_failed_migration_is_not_marked_applied(tmp_path, monkeypatch):
     def broken_migration(conn):
         conn.execute("CREATE TABLE broken_migration_probe (id INTEGER PRIMARY KEY)")

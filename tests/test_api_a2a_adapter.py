@@ -254,7 +254,8 @@ def test_a2a_routes_are_exposed_when_enabled(tmp_path):
     assert sent.json()["status"]["state"] == "TASK_STATE_COMPLETED"
     assert sent.json()["contextId"] == "ctx-1"
     assert sent.json()["artifacts"][0]["parts"] == [{"text": "weather done", "mediaType": "text/plain"}]
-    assert "thread" not in str(sent.json()).lower()
+    assert "thread_id" not in str(sent.json()).lower()
+    assert sent.json()["metadata"]["localThreadId"] == "task:task-1:attempt:1"
     assert fetched.status_code == 200
     assert fetched.json()["jsonrpc"] == "2.0"
     assert fetched.json()["result"]["id"] == "task-1"
@@ -1285,6 +1286,17 @@ def test_a2a_rpc_resume_task_supports_pascal_case_method(tmp_path):
     task = main_store.get_task(task_id)
     assert task is not None
     assert task.status == MainAgentTaskStatus.INPUT_REQUIRED
+    adapter = A2AAdapter(service=service, main_agent_core=core)
+    interrupted_events = adapter.wait_for_task_events(task_id, after_event_id=0, timeout_seconds=0.0).events
+    interrupted = [
+        event
+        for event in interrupted_events
+        if event["result"]["kind"] == "status-update"
+        and event["result"]["metadata"]["localEventType"] == "task_interrupted"
+    ][0]
+    interrupted_metadata = interrupted["result"]["metadata"]
+    assert interrupted_metadata["localThreadId"] == task.runtime_thread_id
+    assert interrupted_metadata["runtimeThreadId"] == task.runtime_thread_id
 
     resumed = client.post(
         "/rpc",
@@ -1388,7 +1400,8 @@ def test_a2a_rpc_missing_task_preserves_request_id_in_jsonrpc_error(tmp_path):
 def test_a2a_rpc_send_streaming_message_emits_local_message_result(tmp_path):
     agent_store = AgentStore(tmp_path / "agent.sqlite")
     main_store = MainAgentStore(agent_store)
-    core = MainAgentCore(store=main_store, local_message_responder=FakeLocalMessageResponder())
+    responder = FakeLocalMessageResponder()
+    core = MainAgentCore(store=main_store, local_message_responder=responder)
     service = AgentService(
         session_store=SessionStore(agent_store),
         runtime_builder=lambda config: FakeRuntime([completed("unused")]),
@@ -1419,6 +1432,7 @@ def test_a2a_rpc_send_streaming_message_emits_local_message_result(tmp_path):
     assert '"id": "rpc-stream-message"' in response.text
     assert '"kind": "message"' in response.text
     assert "direct answer" in response.text
+    assert len(responder.calls) == 1
     service.close()
     agent_store.close()
 

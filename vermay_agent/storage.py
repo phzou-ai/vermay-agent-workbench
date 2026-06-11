@@ -375,6 +375,7 @@ class AgentStore:
     def __post_init__(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._transaction_depth = 0
         self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.setup()
@@ -424,7 +425,8 @@ class AgentStore:
     def execute(self, sql: str, values: Iterable[Any] = ()) -> sqlite3.Cursor:
         with self._lock:
             cursor = self.conn.execute(sql, tuple(values))
-            self.conn.commit()
+            if self._transaction_depth == 0:
+                self.conn.commit()
             return cursor
 
     def query(self, sql: str, values: Iterable[Any] = ()) -> list[sqlite3.Row]:
@@ -434,8 +436,15 @@ class AgentStore:
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
         with self._lock:
-            with self.conn:
-                yield self.conn
+            self._transaction_depth += 1
+            try:
+                if self._transaction_depth == 1:
+                    with self.conn:
+                        yield self.conn
+                else:
+                    yield self.conn
+            finally:
+                self._transaction_depth -= 1
 
     def schema_version(self) -> int:
         rows = self.query("SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations")

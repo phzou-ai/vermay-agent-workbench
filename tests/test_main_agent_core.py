@@ -357,6 +357,46 @@ def test_main_agent_core_local_task_runner_persists_output_message_artifact_and_
     assert runner.calls[0][1] == task.runtime_thread_id
 
 
+def test_main_agent_core_rolls_back_partial_completed_task_result(tmp_path):
+    class FailingArtifactStore(MainAgentStore):
+        def upsert_artifact(self, **kwargs):
+            raise RuntimeError("artifact write failed")
+
+    store = FailingArtifactStore(AgentStore(tmp_path / "agent.sqlite"))
+    core = MainAgentCore(
+        store=store,
+        local_message_responder=FakeResponder(),
+        local_task_runner=FakeTaskRunner(),
+    )
+    context = store.create_context(context_id="ctx-1")
+
+    try:
+        core.handle_message(
+            MainAgentRequest(
+                context_id=context.context_id,
+                message_id="msg-user-1",
+                role=MessageRole.USER,
+                parts=[{"kind": "text", "text": "run"}],
+                metadata={"executionMode": "task"},
+            )
+        )
+    except RuntimeError as exc:
+        assert str(exc) == "artifact write failed"
+    else:
+        raise AssertionError("expected artifact write failure")
+
+    tasks = store.list_context_tasks("ctx-1")
+    assert len(tasks) == 1
+    assert tasks[0].status == TaskStatus.RUNNING
+    assert tasks[0].output_message_id is None
+    assert [message.role for message in store.list_context_messages("ctx-1")] == [MessageRole.USER]
+    assert store.list_task_artifacts(tasks[0].task_id) == []
+    assert [event.type for event in store.list_task_events(tasks[0].task_id)] == [
+        "task_created",
+        "task_started",
+    ]
+
+
 def test_main_agent_core_local_task_runner_failure_marks_task_failed(tmp_path):
     class FailingRunner:
         def run(self, messages: list[MessageRecord], *, thread_id: str) -> LocalTaskRunResult:

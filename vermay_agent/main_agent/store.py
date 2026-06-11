@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from contextlib import contextmanager
+from typing import Any, Iterator
 
 from vermay_agent.storage import AgentStore, utc_now
 
@@ -26,6 +27,11 @@ from .models import (
 class MainAgentStore:
     def __init__(self, store: AgentStore) -> None:
         self.store = store
+
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        with self.store.transaction():
+            yield
 
     def create_context(
         self,

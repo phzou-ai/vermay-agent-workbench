@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from ...a2a_metadata import thread_metadata
 from ..output_envelope import is_projectable_to_a2a, normalize_output_metadata
 from ..session_models import TaskStatus, normalize_task_status
 from ..session_store import TaskArtifactRecord, TaskEventRecord, TaskRecord
@@ -227,7 +228,7 @@ def _metadata(
         "localStatus": local_status,
     }
     if thread_id is not None:
-        metadata["localThreadId"] = thread_id
+        metadata.update(thread_metadata(thread_id))
     if attempt is not None:
         metadata["localAttempt"] = attempt
     if root_task_id is not None:
